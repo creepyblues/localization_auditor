@@ -69,11 +69,11 @@ This guide covers deploying the Localization Auditor application:
 1. Railway will automatically build and deploy using the Dockerfile
 2. Wait for the build to complete (may take 5-10 minutes due to Playwright)
 3. Once deployed, get your Railway URL from the **Settings** tab
-   - Example: `https://localization-auditor-production.up.railway.app`
+   - URL: `https://localizationauditor-production.up.railway.app`
 
 ### 1.5 Verify Backend
 
-Visit `https://your-railway-url.up.railway.app/docs` to see the API documentation.
+Visit `https://localizationauditor-production.up.railway.app/docs` to see the API documentation.
 
 ---
 
@@ -98,7 +98,7 @@ Visit `https://your-railway-url.up.railway.app/docs` to see the API documentatio
 
 | Variable | Value |
 |----------|-------|
-| `NEXT_PUBLIC_API_URL` | `https://your-railway-url.up.railway.app/api` |
+| `NEXT_PUBLIC_API_URL` | `https://localizationauditor-production.up.railway.app/api` |
 
 ### 2.4 Deploy
 
