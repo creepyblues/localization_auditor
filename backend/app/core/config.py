@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import field_validator
 from functools import lru_cache
 
 
@@ -12,6 +13,14 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/localization_auditor"
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def convert_database_url(cls, v: str) -> str:
+        # Convert postgresql:// to postgresql+asyncpg:// for async SQLAlchemy
+        if v and v.startswith("postgresql://"):
+            return v.replace("postgresql://", "postgresql+asyncpg://", 1)
+        return v
 
     # Auth
     secret_key: str = "your-secret-key-change-in-production"
