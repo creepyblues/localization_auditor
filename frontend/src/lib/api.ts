@@ -7,6 +7,7 @@ import type {
   GlossaryCreate,
   GlossaryTerm,
   GlossaryTermCreate,
+  CSVImportResult,
 } from '@/types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
@@ -159,6 +160,28 @@ class ApiClient {
     return this.request<void>(`/glossaries/${glossaryId}/terms/${termId}`, {
       method: 'DELETE',
     });
+  }
+
+  async importSystemGlossaryCSV(file: File, industry: string): Promise<CSVImportResult> {
+    const token = this.getToken();
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('industry', industry);
+
+    const response = await fetch(`${API_BASE}/glossaries/system/import-csv`, {
+      method: 'POST',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
+      throw new Error(error.detail || `HTTP ${response.status}`);
+    }
+
+    return response.json();
   }
 }
 

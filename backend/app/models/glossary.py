@@ -25,6 +25,7 @@ class Glossary(Base):
     # Relationships
     user = relationship("User", back_populates="glossaries")
     terms = relationship("GlossaryTerm", back_populates="glossary", cascade="all, delete-orphan")
+    audits = relationship("Audit", back_populates="glossary")
 
 
 class GlossaryTerm(Base):

@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
 import { INDUSTRIES } from '@/types';
-import type { Glossary, GlossaryTermCreate } from '@/types';
+import type { Glossary, GlossaryTermCreate, CSVImportResult } from '@/types';
 
 export default function GlossariesPage() {
   const { user, loading: authLoading } = useAuth();
@@ -33,6 +33,14 @@ export default function GlossariesPage() {
     target_term: '',
     context: '',
   });
+
+  // CSV Import state
+  const [showCsvImport, setShowCsvImport] = useState(false);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvIndustry, setCsvIndustry] = useState('ecommerce');
+  const [csvImporting, setCsvImporting] = useState(false);
+  const [csvImportResult, setCsvImportResult] = useState<CSVImportResult | null>(null);
+  const [csvImportError, setCsvImportError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -110,6 +118,34 @@ export default function GlossariesPage() {
     }
   };
 
+  const handleCsvImport = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!csvFile) return;
+
+    setCsvImporting(true);
+    setCsvImportError(null);
+    setCsvImportResult(null);
+
+    try {
+      const result = await api.importSystemGlossaryCSV(csvFile, csvIndustry);
+      setCsvImportResult(result);
+      loadGlossaries(); // Refresh glossary list
+    } catch (err) {
+      setCsvImportError(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      setCsvImporting(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setCsvFile(file);
+      setCsvImportResult(null);
+      setCsvImportError(null);
+    }
+  };
+
   if (authLoading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -138,7 +174,14 @@ export default function GlossariesPage() {
             <h2 className="text-2xl font-bold text-gray-900">Glossaries</h2>
             <p className="text-gray-500">Manage industry-specific terminology</p>
           </div>
-          <Button onClick={() => setShowCreateForm(true)}>+ New Glossary</Button>
+          <div className="flex gap-2">
+            {user.is_admin && (
+              <Button variant="secondary" onClick={() => setShowCsvImport(true)}>
+                Import CSV
+              </Button>
+            )}
+            <Button onClick={() => setShowCreateForm(true)}>+ New Glossary</Button>
+          </div>
         </div>
 
         {showCreateForm && (
@@ -187,6 +230,97 @@ export default function GlossariesPage() {
                 <div className="flex gap-2">
                   <Button type="submit">Create</Button>
                   <Button type="button" variant="ghost" onClick={() => setShowCreateForm(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        )}
+
+        {showCsvImport && user.is_admin && (
+          <Card className="mb-8">
+            <CardHeader>
+              <h3 className="font-semibold text-gray-900">Import System Glossary from CSV</h3>
+            </CardHeader>
+            <CardContent>
+              <form onSubmit={handleCsvImport} className="space-y-4">
+                <div className="p-4 bg-blue-50 rounded-lg text-sm text-blue-700">
+                  <p className="font-medium mb-2">CSV Format:</p>
+                  <p>First column must be &quot;en&quot; (English source terms).</p>
+                  <p>Other columns are target languages (e.g., kr, ja, fr).</p>
+                  <p className="mt-2 font-mono text-xs bg-blue-100 p-2 rounded">
+                    en,kr,ja<br />
+                    Add to Cart,장바구니 담기,カートに追加<br />
+                    Checkout,결제하기,チェックアウト
+                  </p>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      CSV File
+                    </label>
+                    <input
+                      type="file"
+                      accept=".csv"
+                      onChange={handleFileChange}
+                      className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                      required
+                    />
+                  </div>
+                  <Select
+                    id="csv_industry"
+                    label="Industry"
+                    value={csvIndustry}
+                    onChange={(e) => setCsvIndustry(e.target.value)}
+                    options={INDUSTRIES.filter(i => i.value !== 'general')}
+                  />
+                </div>
+
+                {csvImportError && (
+                  <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+                    {csvImportError}
+                  </div>
+                )}
+
+                {csvImportResult && (
+                  <div className="p-4 bg-green-50 rounded-lg text-sm">
+                    <p className="font-medium text-green-800 mb-2">Import Complete!</p>
+                    <div className="grid grid-cols-2 gap-2 text-green-700">
+                      <p>Glossaries created: {csvImportResult.glossaries_created}</p>
+                      <p>Glossaries updated: {csvImportResult.glossaries_updated}</p>
+                      <p>Terms added: {csvImportResult.terms_added}</p>
+                      <p>Terms skipped: {csvImportResult.terms_skipped}</p>
+                    </div>
+                    {csvImportResult.details.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-green-200">
+                        <p className="font-medium mb-1">Details:</p>
+                        {csvImportResult.details.map((detail, idx) => (
+                          <p key={idx} className="text-xs">
+                            {detail.source_language} → {detail.target_language}:
+                            {detail.terms_added} added, {detail.terms_skipped} skipped
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <Button type="submit" disabled={csvImporting || !csvFile}>
+                    {csvImporting ? 'Importing...' : 'Import'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setShowCsvImport(false);
+                      setCsvFile(null);
+                      setCsvImportResult(null);
+                      setCsvImportError(null);
+                    }}
+                  >
                     Cancel
                   </Button>
                 </div>

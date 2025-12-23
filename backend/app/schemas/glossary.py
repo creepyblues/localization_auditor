@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from pydantic import BaseModel
 
 
@@ -52,3 +52,13 @@ class GlossaryListResponse(BaseModel):
 
 class GlossaryImport(BaseModel):
     terms: List[GlossaryTermCreate]
+
+
+class CSVImportResultResponse(BaseModel):
+    """Response for CSV glossary import."""
+    glossaries_created: int
+    glossaries_updated: int
+    terms_added: int
+    terms_skipped: int
+    errors: List[str]
+    details: List[Dict[str, Any]]

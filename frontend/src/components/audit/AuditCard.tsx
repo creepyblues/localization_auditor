@@ -44,22 +44,41 @@ export function AuditCard({ audit }: AuditCardProps) {
               </div>
 
               <h3 className="font-medium text-gray-900 truncate mb-1">
-                {new URL(audit.original_url).hostname}
+                {(() => {
+                  try {
+                    return new URL(audit.original_url || audit.audit_url).hostname;
+                  } catch {
+                    return audit.audit_url;
+                  }
+                })()}
               </h3>
 
               <div className="text-sm text-gray-500 space-y-1">
+                {audit.original_url && (
+                  <p className="truncate">
+                    <span className="text-gray-400">Original:</span> {audit.original_url}
+                  </p>
+                )}
                 <p className="truncate">
-                  <span className="text-gray-400">Original:</span> {audit.original_url}
-                </p>
-                <p className="truncate">
-                  <span className="text-gray-400">Localized:</span> {audit.audit_url}
+                  <span className="text-gray-400">
+                    {audit.audit_type === 'standalone' ? 'URL:' : 'Localized:'}
+                  </span> {audit.audit_url}
                 </p>
               </div>
 
-              {audit.source_language && audit.target_language && (
-                <p className="text-sm text-gray-500 mt-2">
-                  {audit.source_language.toUpperCase()} → {audit.target_language.toUpperCase()}
-                </p>
+              {audit.audit_type === 'standalone' ? (
+                audit.source_language && (
+                  <p className="text-sm text-gray-500 mt-2">
+                    <span className="px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded text-xs mr-1">Standalone</span>
+                    From {audit.source_language.toUpperCase()}
+                  </p>
+                )
+              ) : (
+                audit.source_language && audit.target_language && (
+                  <p className="text-sm text-gray-500 mt-2">
+                    {audit.source_language.toUpperCase()} → {audit.target_language.toUpperCase()}
+                  </p>
+                )
               )}
 
               <p className="text-xs text-gray-400 mt-2">

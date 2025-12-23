@@ -1,5 +1,5 @@
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 from sqlalchemy.orm import selectinload
@@ -9,9 +9,11 @@ from app.models.user import User
 from app.models.glossary import Glossary, GlossaryTerm
 from app.schemas.glossary import (
     GlossaryCreate, GlossaryResponse, GlossaryListResponse,
-    GlossaryTermCreate, GlossaryTermResponse, GlossaryImport
+    GlossaryTermCreate, GlossaryTermResponse, GlossaryImport,
+    CSVImportResultResponse
 )
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_admin_user
+from app.services.csv_glossary_import import CSVGlossaryImportService
 
 router = APIRouter(prefix="/glossaries", tags=["glossaries"])
 
@@ -235,3 +237,73 @@ async def delete_term(
 
     await db.delete(term)
     await db.commit()
+
+
+# Admin endpoints for system glossaries
+VALID_INDUSTRIES = {"ecommerce", "adtech", "wellness", "fintech", "gaming", "saas", "healthcare"}
+
+
+@router.post("/system/import-csv", response_model=CSVImportResultResponse)
+async def import_system_glossary_csv(
+    file: UploadFile = File(..., description="CSV file with glossary terms"),
+    industry: str = Form(..., description="Industry for the glossary"),
+    current_user: User = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Import system glossary terms from CSV file.
+
+    CSV Format:
+    - First column: English source terms (header must be 'en')
+    - Other columns: Target language translations (headers: 'kr', 'ja', 'fr', etc.)
+
+    Creates one system glossary per source-target language pair for the specified industry.
+    Only adds new terms - existing terms are skipped (no overwrite).
+
+    Admin access required.
+    """
+    # Validate file type
+    if not file.filename or not file.filename.endswith('.csv'):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File must be a CSV file"
+        )
+
+    # Read file content
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:  # 10MB limit
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File too large (max 10MB)"
+        )
+
+    # Validate industry
+    industry_lower = industry.lower()
+    if industry_lower not in VALID_INDUSTRIES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid industry. Must be one of: {', '.join(sorted(VALID_INDUSTRIES))}"
+        )
+
+    try:
+        service = CSVGlossaryImportService(db)
+        result = await service.import_glossaries(content, industry_lower)
+
+        return CSVImportResultResponse(
+            glossaries_created=result.glossaries_created,
+            glossaries_updated=result.glossaries_updated,
+            terms_added=result.terms_added,
+            terms_skipped=result.terms_skipped,
+            errors=result.errors,
+            details=result.details
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Import failed: {str(e)}"
+        )

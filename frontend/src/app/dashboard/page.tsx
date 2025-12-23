@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { api } from '@/lib/api';
@@ -14,9 +14,23 @@ import type { Audit } from '@/types';
 export default function DashboardPage() {
   const { user, loading: authLoading, logout } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [audits, setAudits] = useState<Audit[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showCreateForm, setShowCreateForm] = useState(false);
+
+  // Check for rerun params
+  const isRerun = searchParams.get('rerun') === 'true';
+  const initialValues = isRerun ? {
+    audit_type: searchParams.get('audit_type') || undefined,
+    original_url: searchParams.get('original_url') || undefined,
+    audit_url: searchParams.get('audit_url') || undefined,
+    source_language: searchParams.get('source_language') || undefined,
+    industry: searchParams.get('industry') || undefined,
+    glossary_id: searchParams.get('glossary_id') || undefined,
+    audit_mode: searchParams.get('audit_mode') || undefined,
+  } : undefined;
+
+  const [showCreateForm, setShowCreateForm] = useState(isRerun);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -85,11 +99,20 @@ export default function DashboardPage() {
         {showCreateForm ? (
           <div className="max-w-2xl mx-auto">
             <div className="mb-4">
-              <Button variant="ghost" onClick={() => setShowCreateForm(false)}>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setShowCreateForm(false);
+                  // Clear rerun params from URL
+                  if (isRerun) {
+                    router.replace('/dashboard');
+                  }
+                }}
+              >
                 &larr; Back to Dashboard
               </Button>
             </div>
-            <CreateAuditForm />
+            <CreateAuditForm initialValues={initialValues} isRerun={isRerun} />
           </div>
         ) : (
           <>

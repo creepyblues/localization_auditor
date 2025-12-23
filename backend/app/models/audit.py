@@ -1,6 +1,7 @@
 from datetime import datetime
 from enum import Enum
-from sqlalchemy import String, DateTime, ForeignKey, Text, Integer, JSON
+from typing import Optional
+from sqlalchemy import String, DateTime, ForeignKey, Text, Integer, JSON, Float
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -12,6 +13,12 @@ class AuditStatus(str, Enum):
     ANALYZING = "analyzing"
     COMPLETED = "completed"
     FAILED = "failed"
+
+
+class AuditType(str, Enum):
+    """Type of audit - comparison or standalone."""
+    COMPARISON = "comparison"  # Compare original URL with localized URL
+    STANDALONE = "standalone"  # Assess back-translation quality of single URL
 
 
 class AuditDimension(str, Enum):
@@ -31,8 +38,11 @@ class Audit(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
 
+    # Audit type: comparison (requires original_url) or standalone (only audit_url)
+    audit_type: Mapped[str] = mapped_column(String(20), default=AuditType.COMPARISON.value)
+
     # URLs to audit
-    original_url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    original_url: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)  # Required for comparison, None for standalone
     audit_url: Mapped[str] = mapped_column(String(2048), nullable=False)
 
     # Metadata
@@ -40,9 +50,23 @@ class Audit(Base):
     target_language: Mapped[str] = mapped_column(String(10), nullable=True)  # e.g., "ko"
     industry: Mapped[str] = mapped_column(String(100), nullable=True)  # e.g., "ecommerce", "adtech", "wellness"
 
+    # Audit mode: auto, text, screenshot, combined (user selection)
+    audit_mode: Mapped[str] = mapped_column(String(20), default="auto", nullable=True)
+
+    # Actual analysis method used (set by auditor after determining method)
+    actual_audit_mode: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+
+    # Glossary used for analysis
+    glossary_id: Mapped[int] = mapped_column(ForeignKey("glossaries.id"), nullable=True)
+
     # Status tracking
     status: Mapped[str] = mapped_column(String(50), default=AuditStatus.PENDING.value)
     error_message: Mapped[str] = mapped_column(Text, nullable=True)
+
+    # Progress tracking
+    progress_message: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    progress_step: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    progress_total: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     # Overall score (average of all dimensions)
     overall_score: Mapped[int] = mapped_column(Integer, nullable=True)
@@ -54,6 +78,16 @@ class Audit(Base):
     # Aligned content pairs for side-by-side comparison
     content_pairs: Mapped[dict] = mapped_column(JSON, nullable=True)
 
+    # Screenshots (base64-encoded PNG images)
+    original_screenshot: Mapped[str] = mapped_column(Text, nullable=True)
+    audit_screenshot: Mapped[str] = mapped_column(Text, nullable=True)
+
+    # API usage and cost tracking
+    api_cost_usd: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    api_input_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    api_output_tokens: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    api_duration_ms: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     completed_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
@@ -61,6 +95,7 @@ class Audit(Base):
     # Relationships
     user = relationship("User", back_populates="audits")
     results = relationship("AuditResult", back_populates="audit", cascade="all, delete-orphan")
+    glossary = relationship("Glossary", back_populates="audits")
 
 
 class AuditResult(Base):
