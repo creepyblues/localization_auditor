@@ -922,11 +922,15 @@ Remember to:
                 "args": ["@anthropic-ai/mcp-server-playwright@latest"]
             }
 
+        # Determine permission mode - can't use bypassPermissions when running as root
+        is_root = os.geteuid() == 0 if hasattr(os, 'geteuid') else False
+        permission_mode = "auto" if is_root else "bypassPermissions"
+
         options = ClaudeAgentOptions(
             system_prompt=AGENT_SYSTEM_PROMPT,
             allowed_tools=allowed_tools,
             mcp_servers=mcp_servers,
-            permission_mode="bypassPermissions"
+            permission_mode=permission_mode
         )
 
         # Run the agent and collect response
@@ -1065,11 +1069,15 @@ Remember to:
                 "args": ["@anthropic-ai/mcp-server-playwright@latest"]
             }
 
+        # Determine permission mode - can't use bypassPermissions when running as root
+        is_root = os.geteuid() == 0 if hasattr(os, 'geteuid') else False
+        permission_mode = "auto" if is_root else "bypassPermissions"
+
         options = ClaudeAgentOptions(
             system_prompt=STANDALONE_AGENT_SYSTEM_PROMPT,
             allowed_tools=allowed_tools,
             mcp_servers=mcp_servers,
-            permission_mode="bypassPermissions"
+            permission_mode=permission_mode
         )
 
         # Run the agent and collect response
