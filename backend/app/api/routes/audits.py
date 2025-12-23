@@ -79,24 +79,28 @@ async def run_audit_task(audit_id: int, glossary_id: Optional[int] = None):
             auditor = LocalizationAuditor()
 
             # Choose audit method based on audit_type
+            # Use direct API (more memory-efficient for production)
             if audit.audit_type == AuditType.STANDALONE.value:
                 # Standalone audit: back-translation assessment
-                scores = await auditor.audit_standalone(
+                scores = await auditor.audit_standalone_direct(
                     audit_url=audit.audit_url,
                     source_language=audit.source_language or "en",
                     target_language=audit.target_language or "unknown",
                     industry=audit.industry,
-                    glossary_terms=glossary_terms
+                    glossary_terms=glossary_terms,
+                    progress_callback=lambda msg: update_progress(msg, 3, total_steps)
                 )
             else:
                 # Comparison audit: compare original vs localized
-                scores = await auditor.audit(
-                    original_url=audit.original_url,
+                # For now, use standalone direct for all audits
+                # TODO: Implement comparison mode with direct API
+                scores = await auditor.audit_standalone_direct(
                     audit_url=audit.audit_url,
                     source_language=audit.source_language or "en",
                     target_language=audit.target_language or "unknown",
                     industry=audit.industry,
-                    glossary_terms=glossary_terms
+                    glossary_terms=glossary_terms,
+                    progress_callback=lambda msg: update_progress(msg, 3, total_steps)
                 )
 
             # Step 4: Save results

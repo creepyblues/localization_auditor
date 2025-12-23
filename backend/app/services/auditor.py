@@ -1,31 +1,43 @@
 """
-Localization Auditor Service using Claude Agent SDK
+Localization Auditor Service
 
-This service uses the Claude Agent SDK for sophisticated localization auditing
-with tool-use capabilities including web scraping and glossary validation.
+This service provides localization quality auditing using Claude API.
+It supports both direct API mode (memory-efficient for production) and
+Agent SDK mode (for local development with tool-use capabilities).
 """
 
 import json
+import logging
 import os
 import re
 import shutil
+import time
 from typing import Optional, Any
 from dataclasses import dataclass, asdict
 
-from claude_agent_sdk import (
-    ClaudeSDKClient,
-    ClaudeAgentOptions,
-    AssistantMessage,
-    ResultMessage,
-    TextBlock,
-    ToolUseBlock,
-    ToolResultBlock,
-    tool,
-    create_sdk_mcp_server,
-)
+import anthropic
+
+# Optional import for Agent SDK (may not be available in production)
+try:
+    from claude_agent_sdk import (
+        ClaudeSDKClient,
+        ClaudeAgentOptions,
+        AssistantMessage,
+        ResultMessage,
+        TextBlock,
+        ToolUseBlock,
+        ToolResultBlock,
+        tool,
+        create_sdk_mcp_server,
+    )
+    AGENT_SDK_AVAILABLE = True
+except ImportError:
+    AGENT_SDK_AVAILABLE = False
 
 from app.core.config import get_settings
-from app.services.scraper import ScrapedContent
+from app.services.scraper import ScrapedContent, WebScraper
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
@@ -290,6 +302,66 @@ The JSON MUST follow this EXACT structure:
 IMPORTANT:
 - Include ALL 7 dimensions in the exact order shown (CONSISTENCY is excluded)
 - The overall_score should be the average of all dimension scores
+- Each finding MUST have: issue, text, suggestion, severity
+- Each good_example MUST have: description, text
+- The JSON must be valid and parseable
+"""
+
+
+# Direct API system prompt (used when content is pre-scraped)
+DIRECT_API_SYSTEM_PROMPT = """You are an expert localization quality auditor specializing in back-translation assessment.
+
+Your task is to evaluate a localized website's translation quality based on the scraped content provided.
+You will assess whether the content appears to be a quality translation from the specified source language.
+
+## Assessment Approach
+
+Evaluate whether the text appears to be a quality translation FROM the specified source language.
+Consider:
+- Does the text read naturally in the target language?
+- Are there signs of machine translation (awkward phrasing, unnatural constructs)?
+- Does the sentence structure follow natural patterns for the target language?
+- Are there literal translations that don't make sense culturally?
+- Is terminology usage appropriate for the industry?
+- Are date/currency/number formats properly localized?
+
+## Dimensions to Evaluate (score 0-100 each)
+
+- **CORRECTNESS**: Grammar, spelling, natural expression in target language
+- **CULTURAL_RELEVANCE**: Cultural adaptation, appropriate idioms, tone for local audience
+- **INDUSTRY_EXPERTISE**: Domain-specific terminology accuracy and appropriateness
+- **FLUENCY**: Natural reading flow, sentence structure, coherence
+- **COMPLETENESS**: Detection of missing/untranslated content, placeholders
+- **UI_UX**: Date/time formats, currency, measurements, number formats
+- **SEO**: Meta tags, title optimization, keyword presence
+
+## Output Format
+
+You MUST end your response with a JSON code block containing the audit results:
+
+```json
+{
+  "overall_score": <int 0-100>,
+  "dimensions": [
+    {
+      "dimension": "CORRECTNESS",
+      "score": <int 0-100>,
+      "findings": [
+        {"issue": "<description>", "text": "<problematic text from page>", "suggestion": "<improved version>", "severity": "high|medium|low"}
+      ],
+      "good_examples": [
+        {"description": "<why this is well done>", "text": "<well-translated text>"}
+      ],
+      "recommendations": ["<actionable recommendation>"]
+    },
+    // ... include ALL 7 dimensions
+  ]
+}
+```
+
+IMPORTANT:
+- Include ALL 7 dimensions in exact order: CORRECTNESS, CULTURAL_RELEVANCE, INDUSTRY_EXPERTISE, FLUENCY, COMPLETENESS, UI_UX, SEO
+- overall_score = average of all dimension scores
 - Each finding MUST have: issue, text, suggestion, severity
 - Each good_example MUST have: description, text
 - The JSON must be valid and parseable
@@ -1121,6 +1193,157 @@ Remember to:
             if result_message.usage:
                 result.api_input_tokens = result_message.usage.get("input_tokens")
                 result.api_output_tokens = result_message.usage.get("output_tokens")
+
+        return result
+
+    async def audit_standalone_direct(
+        self,
+        audit_url: str,
+        source_language: str,
+        target_language: str,
+        industry: Optional[str] = None,
+        glossary_terms: Optional[list[dict]] = None,
+        progress_callback: Optional[Any] = None
+    ) -> AuditScore:
+        """
+        Run standalone localization audit using direct Anthropic API.
+
+        This method is more memory-efficient than the Agent SDK version
+        as it doesn't spawn subprocesses. Ideal for production deployment.
+
+        Args:
+            audit_url: URL of the localized site to audit
+            source_language: The language the content was translated FROM
+            target_language: The language the content is in (target language)
+            industry: Optional industry context
+            glossary_terms: Optional list of glossary terms for validation
+            progress_callback: Optional async callback for progress updates
+        """
+        start_time = time.time()
+
+        # Step 1: Scrape the website content
+        if progress_callback:
+            await progress_callback("Scraping website content...")
+
+        logger.info(f"Scraping content from {audit_url}")
+
+        try:
+            async with WebScraper() as scraper:
+                scraped_content = await scraper.scrape_url(audit_url)
+        except Exception as e:
+            logger.error(f"Failed to scrape {audit_url}: {e}")
+            raise Exception(f"Failed to scrape website: {e}")
+
+        # Step 2: Build the prompt with scraped content
+        if progress_callback:
+            await progress_callback("Analyzing content with AI...")
+
+        # Format glossary terms
+        glossary_text = ""
+        if glossary_terms:
+            glossary_text = "\n\n## Industry Glossary\n\n"
+            glossary_text += "Use these terms to validate terminology:\n"
+            for t in glossary_terms[:50]:  # Limit to 50 terms to manage context
+                glossary_text += f"- \"{t['source_term']}\" -> \"{t['target_term']}\""
+                if t.get('context'):
+                    glossary_text += f" (context: {t['context']})"
+                glossary_text += "\n"
+
+        # Format scraped content
+        content_text = f"""## Scraped Content from {audit_url}
+
+**Page Title:** {scraped_content.title}
+**Detected Language:** {scraped_content.detected_language or 'unknown'}
+**Meta Description:** {scraped_content.meta_description or 'none'}
+**Meta Keywords:** {scraped_content.meta_keywords or 'none'}
+
+### Headings
+"""
+        for h in scraped_content.headings[:30]:  # Limit headings
+            content_text += f"- H{h['level']}: {h['text']}\n"
+
+        content_text += "\n### Main Text Content\n"
+        # Combine paragraphs, limit total length
+        para_text = "\n\n".join(scraped_content.paragraphs[:50])
+        if len(para_text) > 15000:
+            para_text = para_text[:15000] + "\n\n[Content truncated...]"
+        content_text += para_text
+
+        content_text += "\n\n### Buttons/CTAs\n"
+        for btn in scraped_content.buttons[:20]:
+            content_text += f"- {btn}\n"
+
+        content_text += "\n\n### Links\n"
+        for link in scraped_content.links[:30]:
+            content_text += f"- {link['text']}\n"
+
+        # Build the full prompt
+        prompt = f"""Please perform a back-translation quality assessment on the following localized website content:
+
+**URL:** {audit_url}
+**Original Language (translated FROM):** {source_language}
+**Target Language (translated TO):** {target_language}
+**Industry:** {industry or 'General'}
+{glossary_text}
+{content_text}
+
+## Instructions
+
+Assess whether the content appears to be a quality translation from {source_language} to {target_language}.
+
+Evaluate all 7 dimensions and provide:
+1. Score (0-100) for each dimension
+2. Specific findings with problematic text and suggestions
+3. Good examples of well-done translations
+4. Actionable recommendations
+
+End your response with the JSON code block as specified in the system prompt.
+"""
+
+        # Step 3: Call Claude API directly
+        logger.info("Calling Claude API for analysis")
+
+        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+
+        try:
+            response = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=8192,
+                system=DIRECT_API_SYSTEM_PROMPT,
+                messages=[
+                    {"role": "user", "content": prompt}
+                ]
+            )
+        except Exception as e:
+            logger.error(f"Claude API error: {e}")
+            raise Exception(f"AI analysis failed: {e}")
+
+        # Extract response text
+        response_text = ""
+        for block in response.content:
+            if hasattr(block, 'text'):
+                response_text += block.text
+
+        # Step 4: Parse the response
+        if progress_callback:
+            await progress_callback("Processing results...")
+
+        result = parse_agent_output(response_text, standalone=True)
+        result.analysis_method = "text"
+
+        # Calculate timing and costs
+        duration_ms = int((time.time() - start_time) * 1000)
+        result.api_duration_ms = duration_ms
+        result.api_input_tokens = response.usage.input_tokens
+        result.api_output_tokens = response.usage.output_tokens
+
+        # Calculate cost (Claude Sonnet pricing)
+        # Input: $3 per 1M tokens, Output: $15 per 1M tokens
+        input_cost = (response.usage.input_tokens / 1_000_000) * 3.0
+        output_cost = (response.usage.output_tokens / 1_000_000) * 15.0
+        result.api_cost_usd = round(input_cost + output_cost, 4)
+
+        logger.info(f"Audit complete: score={result.overall_score}, tokens={response.usage.input_tokens}+{response.usage.output_tokens}, cost=${result.api_cost_usd}")
 
         return result
 
