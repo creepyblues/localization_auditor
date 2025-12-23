@@ -1219,22 +1219,48 @@ Remember to:
             glossary_terms: Optional list of glossary terms for validation
             progress_callback: Optional async callback for progress updates
         """
-        start_time = time.time()
+        import base64
+        from app.services.scraper import validate_content
 
-        # Step 1: Scrape the website content
+        start_time = time.time()
+        use_screenshot = False
+        screenshot_base64 = None
+        scraped_content = None
+
+        # Step 1: Try to scrape the website content
         if progress_callback:
             await progress_callback("Scraping website content...")
 
         logger.info(f"Scraping content from {audit_url}")
 
-        try:
-            async with WebScraper() as scraper:
+        async with WebScraper() as scraper:
+            try:
                 scraped_content = await scraper.scrape_url(audit_url)
-        except Exception as e:
-            logger.error(f"Failed to scrape {audit_url}: {e}")
-            raise Exception(f"Failed to scrape website: {e}")
 
-        # Step 2: Build the prompt with scraped content
+                # Validate content - check for bot protection
+                is_valid, validation_msg = validate_content(scraped_content)
+                if not is_valid:
+                    logger.warning(f"Content validation failed: {validation_msg}. Falling back to screenshot.")
+                    use_screenshot = True
+            except Exception as e:
+                logger.warning(f"Scraping failed: {e}. Falling back to screenshot.")
+                use_screenshot = True
+
+            # If scraping failed or content is invalid, take a screenshot
+            if use_screenshot:
+                if progress_callback:
+                    await progress_callback("Text scraping blocked. Taking screenshot...")
+
+                logger.info(f"Taking screenshot of {audit_url}")
+                try:
+                    screenshot_bytes = await scraper.take_screenshot(audit_url)
+                    screenshot_base64 = base64.b64encode(screenshot_bytes).decode('utf-8')
+                    logger.info(f"Screenshot captured: {len(screenshot_bytes)} bytes")
+                except Exception as e:
+                    logger.error(f"Screenshot also failed: {e}")
+                    raise Exception(f"Could not access website via scraping or screenshot: {e}")
+
+        # Step 2: Build the prompt
         if progress_callback:
             await progress_callback("Analyzing content with AI...")
 
@@ -1249,8 +1275,57 @@ Remember to:
                     glossary_text += f" (context: {t['context']})"
                 glossary_text += "\n"
 
-        # Format scraped content
-        content_text = f"""## Scraped Content from {audit_url}
+        # Build prompt based on whether we have text or screenshot
+        if use_screenshot:
+            # Screenshot-based analysis
+            prompt = f"""Please perform a back-translation quality assessment on this localized website screenshot.
+
+**URL:** {audit_url}
+**Original Language (translated FROM):** {source_language}
+**Target Language (translated TO):** {target_language}
+**Industry:** {industry or 'General'}
+{glossary_text}
+
+## Instructions
+
+Analyze the screenshot and assess whether the visible content appears to be a quality translation from {source_language} to {target_language}.
+
+Look for:
+- Text that reads naturally in {target_language}
+- Signs of machine translation (awkward phrasing)
+- Cultural adaptation issues
+- UI/UX localization (dates, numbers, currency formats)
+- Missing or placeholder text
+
+Evaluate all 7 dimensions and provide:
+1. Score (0-100) for each dimension
+2. Specific findings with problematic text and suggestions
+3. Good examples of well-done translations
+4. Actionable recommendations
+
+End your response with the JSON code block as specified in the system prompt.
+"""
+            # Build message with image
+            messages = [{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/png",
+                            "data": screenshot_base64
+                        }
+                    },
+                    {
+                        "type": "text",
+                        "text": prompt
+                    }
+                ]
+            }]
+        else:
+            # Text-based analysis
+            content_text = f"""## Scraped Content from {audit_url}
 
 **Page Title:** {scraped_content.title}
 **Detected Language:** {scraped_content.detected_language or 'unknown'}
@@ -1259,26 +1334,25 @@ Remember to:
 
 ### Headings
 """
-        for h in scraped_content.headings[:30]:  # Limit headings
-            content_text += f"- H{h['level']}: {h['text']}\n"
+            for h in scraped_content.headings[:30]:  # Limit headings
+                content_text += f"- H{h['level']}: {h['text']}\n"
 
-        content_text += "\n### Main Text Content\n"
-        # Combine paragraphs, limit total length
-        para_text = "\n\n".join(scraped_content.paragraphs[:50])
-        if len(para_text) > 15000:
-            para_text = para_text[:15000] + "\n\n[Content truncated...]"
-        content_text += para_text
+            content_text += "\n### Main Text Content\n"
+            # Combine paragraphs, limit total length
+            para_text = "\n\n".join(scraped_content.paragraphs[:50])
+            if len(para_text) > 15000:
+                para_text = para_text[:15000] + "\n\n[Content truncated...]"
+            content_text += para_text
 
-        content_text += "\n\n### Buttons/CTAs\n"
-        for btn in scraped_content.buttons[:20]:
-            content_text += f"- {btn}\n"
+            content_text += "\n\n### Buttons/CTAs\n"
+            for btn in scraped_content.buttons[:20]:
+                content_text += f"- {btn}\n"
 
-        content_text += "\n\n### Links\n"
-        for link in scraped_content.links[:30]:
-            content_text += f"- {link['text']}\n"
+            content_text += "\n\n### Links\n"
+            for link in scraped_content.links[:30]:
+                content_text += f"- {link['text']}\n"
 
-        # Build the full prompt
-        prompt = f"""Please perform a back-translation quality assessment on the following localized website content:
+            prompt = f"""Please perform a back-translation quality assessment on the following localized website content:
 
 **URL:** {audit_url}
 **Original Language (translated FROM):** {source_language}
@@ -1299,9 +1373,10 @@ Evaluate all 7 dimensions and provide:
 
 End your response with the JSON code block as specified in the system prompt.
 """
+            messages = [{"role": "user", "content": prompt}]
 
-        # Step 3: Call Claude API directly
-        logger.info("Calling Claude API for analysis")
+        # Step 3: Call Claude API
+        logger.info(f"Calling Claude API for {'screenshot' if use_screenshot else 'text'} analysis")
 
         client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
@@ -1310,9 +1385,7 @@ End your response with the JSON code block as specified in the system prompt.
                 model="claude-sonnet-4-20250514",
                 max_tokens=8192,
                 system=DIRECT_API_SYSTEM_PROMPT,
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
+                messages=messages
             )
         except Exception as e:
             logger.error(f"Claude API error: {e}")
@@ -1329,7 +1402,11 @@ End your response with the JSON code block as specified in the system prompt.
             await progress_callback("Processing results...")
 
         result = parse_agent_output(response_text, standalone=True)
-        result.analysis_method = "text"
+        result.analysis_method = "screenshot" if use_screenshot else "text"
+
+        # Store screenshot if used
+        if use_screenshot and screenshot_base64:
+            result.audit_screenshot = screenshot_base64
 
         # Calculate timing and costs
         duration_ms = int((time.time() - start_time) * 1000)
@@ -1343,7 +1420,7 @@ End your response with the JSON code block as specified in the system prompt.
         output_cost = (response.usage.output_tokens / 1_000_000) * 15.0
         result.api_cost_usd = round(input_cost + output_cost, 4)
 
-        logger.info(f"Audit complete: score={result.overall_score}, tokens={response.usage.input_tokens}+{response.usage.output_tokens}, cost=${result.api_cost_usd}")
+        logger.info(f"Audit complete: method={'screenshot' if use_screenshot else 'text'}, score={result.overall_score}, tokens={response.usage.input_tokens}+{response.usage.output_tokens}, cost=${result.api_cost_usd}")
 
         return result
 
