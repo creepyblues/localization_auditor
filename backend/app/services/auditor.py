@@ -6,7 +6,9 @@ with tool-use capabilities including web scraping and glossary validation.
 """
 
 import json
+import os
 import re
+import shutil
 from typing import Optional, Any
 from dataclasses import dataclass, asdict
 
@@ -894,24 +896,36 @@ Remember to:
 """
 
         # Configure agent options
-        options = ClaudeAgentOptions(
-            system_prompt=AGENT_SYSTEM_PROMPT,
-            allowed_tools=[
-                "WebFetch",
-                "WebSearch",
-                "Read",
-                "mcp__glossary__get_glossary",
+        # Check if npx is available for Playwright MCP (requires Node.js)
+        npx_available = shutil.which("npx") is not None
+
+        allowed_tools = [
+            "WebFetch",
+            "WebSearch",
+            "Read",
+            "mcp__glossary__get_glossary",
+        ]
+
+        mcp_servers = {
+            "glossary": glossary_server,
+        }
+
+        # Only add Playwright if npx is available
+        if npx_available:
+            allowed_tools.extend([
                 "mcp__playwright__browser_navigate",
                 "mcp__playwright__browser_snapshot",
                 "mcp__playwright__browser_screenshot",
-            ],
-            mcp_servers={
-                "glossary": glossary_server,
-                "playwright": {
-                    "command": "npx",
-                    "args": ["@anthropic-ai/mcp-server-playwright@latest"]
-                }
-            },
+            ])
+            mcp_servers["playwright"] = {
+                "command": "npx",
+                "args": ["@anthropic-ai/mcp-server-playwright@latest"]
+            }
+
+        options = ClaudeAgentOptions(
+            system_prompt=AGENT_SYSTEM_PROMPT,
+            allowed_tools=allowed_tools,
+            mcp_servers=mcp_servers,
             permission_mode="bypassPermissions"
         )
 
@@ -1025,24 +1039,36 @@ Remember to:
 """
 
         # Configure agent options
-        options = ClaudeAgentOptions(
-            system_prompt=STANDALONE_AGENT_SYSTEM_PROMPT,
-            allowed_tools=[
-                "WebFetch",
-                "WebSearch",
-                "Read",
-                "mcp__glossary__get_glossary",
+        # Check if npx is available for Playwright MCP (requires Node.js)
+        npx_available = shutil.which("npx") is not None
+
+        allowed_tools = [
+            "WebFetch",
+            "WebSearch",
+            "Read",
+            "mcp__glossary__get_glossary",
+        ]
+
+        mcp_servers = {
+            "glossary": glossary_server,
+        }
+
+        # Only add Playwright if npx is available
+        if npx_available:
+            allowed_tools.extend([
                 "mcp__playwright__browser_navigate",
                 "mcp__playwright__browser_snapshot",
                 "mcp__playwright__browser_screenshot",
-            ],
-            mcp_servers={
-                "glossary": glossary_server,
-                "playwright": {
-                    "command": "npx",
-                    "args": ["@anthropic-ai/mcp-server-playwright@latest"]
-                }
-            },
+            ])
+            mcp_servers["playwright"] = {
+                "command": "npx",
+                "args": ["@anthropic-ai/mcp-server-playwright@latest"]
+            }
+
+        options = ClaudeAgentOptions(
+            system_prompt=STANDALONE_AGENT_SYSTEM_PROMPT,
+            allowed_tools=allowed_tools,
+            mcp_servers=mcp_servers,
             permission_mode="bypassPermissions"
         )
 
