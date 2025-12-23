@@ -81,7 +81,10 @@ function DashboardContent() {
       <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold text-gray-900">Localization Auditor</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold text-gray-900">Localization Auditor</h1>
+              <span className="text-xs text-gray-400 font-normal">v{process.env.APP_VERSION}</span>
+            </div>
             <div className="flex items-center gap-4">
               <Link href="/glossaries">
                 <Button variant="ghost">Glossaries</Button>

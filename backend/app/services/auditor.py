@@ -924,7 +924,7 @@ Remember to:
 
         # Determine permission mode - can't use bypassPermissions when running as root
         is_root = os.geteuid() == 0 if hasattr(os, 'geteuid') else False
-        permission_mode = "auto" if is_root else "bypassPermissions"
+        permission_mode = "default" if is_root else "bypassPermissions"
 
         options = ClaudeAgentOptions(
             system_prompt=AGENT_SYSTEM_PROMPT,
@@ -1071,7 +1071,7 @@ Remember to:
 
         # Determine permission mode - can't use bypassPermissions when running as root
         is_root = os.geteuid() == 0 if hasattr(os, 'geteuid') else False
-        permission_mode = "auto" if is_root else "bypassPermissions"
+        permission_mode = "default" if is_root else "bypassPermissions"
 
         options = ClaudeAgentOptions(
             system_prompt=STANDALONE_AGENT_SYSTEM_PROMPT,
