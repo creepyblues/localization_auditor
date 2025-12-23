@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     debug: bool = False
 
     # CORS - comma-separated list of allowed origins
-    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000,https://localization-auditor.vercel.app"
 
     # Database
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/localization_auditor"
