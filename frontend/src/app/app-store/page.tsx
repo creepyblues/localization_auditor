@@ -7,19 +7,8 @@ import { api } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Header } from '@/components/layout/Header';
-import type { AppStoreScanResult } from '@/types';
+import type { AppStoreScanResult, AppStoreScanHistory } from '@/types';
 import { APP_STORE_CATEGORIES, APP_STORE_FEED_TYPES } from '@/types';
-
-interface ScanHistoryItem {
-  id: string;
-  timestamp: number;
-  category: string;
-  feedType: string;
-  country: string;
-  totalApps: number;
-  uniqueLanguages: number;
-  result: AppStoreScanResult;
-}
 
 export default function AppStorePage() {
   const { user, loading: authLoading } = useAuth();
@@ -38,20 +27,30 @@ export default function AppStorePage() {
   const [selectedLanguages, setSelectedLanguages] = useState<string[]>([]);
 
   // History state
-  const [scanHistory, setScanHistory] = useState<ScanHistoryItem[]>([]);
+  const [scanHistory, setScanHistory] = useState<AppStoreScanHistory[]>([]);
   const [showAllHistory, setShowAllHistory] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(true);
 
   // Expandable rows state for Korean metadata
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [allExpanded, setAllExpanded] = useState(false);
 
-  // Load history from localStorage on mount
+  // Load history from API on mount
   useEffect(() => {
-    const saved = localStorage.getItem('appStoreScanHistory');
-    if (saved) {
-      setScanHistory(JSON.parse(saved));
+    const loadHistory = async () => {
+      try {
+        const response = await api.listAppStoreScans(0, 50);
+        setScanHistory(response.scans);
+      } catch (err) {
+        console.error('Failed to load scan history:', err);
+      } finally {
+        setHistoryLoading(false);
+      }
+    };
+    if (user) {
+      loadHistory();
     }
-  }, []);
+  }, [user]);
 
   const toggleLanguageFilter = (lang: string) => {
     setSelectedLanguages(prev =>
@@ -96,20 +95,21 @@ export default function AppStorePage() {
       const result = await api.scanAppStoreCategory(category, feedType, limit, country);
       setScanResult(result);
 
-      // Save to history
-      const historyItem: ScanHistoryItem = {
-        id: Date.now().toString(),
-        timestamp: Date.now(),
-        category,
-        feedType,
-        country,
-        totalApps: result.total_apps_scanned,
-        uniqueLanguages: result.statistics.total_unique_languages,
-        result,
-      };
-      const newHistory = [historyItem, ...scanHistory];
-      setScanHistory(newHistory);
-      localStorage.setItem('appStoreScanHistory', JSON.stringify(newHistory));
+      // Save to database via API
+      try {
+        const savedScan = await api.saveAppStoreScan({
+          category,
+          feed_type: feedType,
+          country,
+          total_apps: result.total_apps_scanned,
+          unique_languages: result.statistics.total_unique_languages,
+          result,
+        });
+        setScanHistory(prev => [savedScan, ...prev]);
+      } catch (saveErr) {
+        console.error('Failed to save scan to history:', saveErr);
+        // Scan still succeeded, just history save failed
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to scan App Store');
       console.error('Scan error:', err);
@@ -131,17 +131,22 @@ export default function AppStorePage() {
     URL.revokeObjectURL(url);
   };
 
-  const loadHistoryItem = (item: ScanHistoryItem) => {
+  const loadHistoryItem = (item: AppStoreScanHistory) => {
     setScanResult(item.result);
     setSelectedLanguages([]);
     setCategory(item.category);
-    setFeedType(item.feedType);
+    setFeedType(item.feed_type);
     setCountry(item.country);
   };
 
-  const clearHistory = () => {
-    setScanHistory([]);
-    localStorage.removeItem('appStoreScanHistory');
+  const deleteHistoryItem = async (scanId: number, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent triggering loadHistoryItem
+    try {
+      await api.deleteAppStoreScan(scanId);
+      setScanHistory(prev => prev.filter(s => s.id !== scanId));
+    } catch (err) {
+      console.error('Failed to delete scan:', err);
+    }
   };
 
   if (authLoading || !user) {
@@ -260,37 +265,44 @@ export default function AppStorePage() {
         </Card>
 
         {/* Scan History */}
-        {scanHistory.length > 0 && (
+        {(scanHistory.length > 0 || historyLoading) && (
           <Card className="mb-8">
             <CardContent className="py-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-gray-700">Recent Scans</h3>
-                <button
-                  onClick={clearHistory}
-                  className="text-xs text-gray-400 hover:text-red-500"
-                >
-                  Clear
-                </button>
+                <h3 className="text-sm font-semibold text-gray-700">
+                  Recent Scans {historyLoading && <span className="text-gray-400">(loading...)</span>}
+                </h3>
               </div>
               <div className="space-y-2">
                 {(showAllHistory ? scanHistory : scanHistory.slice(0, 5)).map((item) => (
-                  <button
+                  <div
                     key={item.id}
                     onClick={() => loadHistoryItem(item)}
-                    className="w-full text-left px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded-md text-sm flex justify-between items-center"
+                    className="w-full text-left px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded-md text-sm flex justify-between items-center cursor-pointer group"
                   >
                     <div className="flex flex-col">
                       <span>
-                        {item.category.replace('_', ' ')} • {item.feedType} • {item.country.toUpperCase()}
+                        {item.category.replace('_', ' ')} • {item.feed_type} • {item.country.toUpperCase()}
                       </span>
                       <span className="text-xs text-gray-400">
-                        {new Date(item.timestamp).toLocaleString()}
+                        {new Date(item.created_at).toLocaleString()}
                       </span>
                     </div>
-                    <span className="text-gray-500 text-xs">
-                      {item.totalApps} apps • {item.uniqueLanguages} langs
-                    </span>
-                  </button>
+                    <div className="flex items-center gap-3">
+                      <span className="text-gray-500 text-xs">
+                        {item.total_apps} apps • {item.unique_languages} langs
+                      </span>
+                      <button
+                        onClick={(e) => deleteHistoryItem(item.id, e)}
+                        className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity"
+                        title="Delete scan"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
                 ))}
               </div>
               {scanHistory.length > 5 && (
@@ -431,7 +443,7 @@ export default function AppStorePage() {
                               App Name
                             </th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                              Developer
+                              Developer / Research
                             </th>
                             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                               Languages
@@ -461,8 +473,63 @@ export default function AppStorePage() {
                               {app.app_name}
                             </a>
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-500">
-                            {app.artist}
+                          <td className="px-4 py-3 text-sm">
+                            <div className="flex flex-col gap-1">
+                              <span className="text-gray-900 font-medium">
+                                {app.seller_name || app.artist}
+                              </span>
+                              <div className="flex flex-wrap gap-1.5">
+                                {app.seller_url && (
+                                  <a
+                                    href={app.seller_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center px-1.5 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                                    title="Developer Website"
+                                  >
+                                    Website
+                                  </a>
+                                )}
+                                {app.artist_view_url && (
+                                  <a
+                                    href={app.artist_view_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center px-1.5 py-0.5 text-xs font-medium bg-gray-100 text-gray-700 rounded hover:bg-gray-200"
+                                    title="All Apps by Developer"
+                                  >
+                                    All Apps
+                                  </a>
+                                )}
+                                <a
+                                  href={`https://www.google.com/search?q=${encodeURIComponent((app.seller_name || app.artist) + ' company employees')}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center px-1.5 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 rounded hover:bg-yellow-200"
+                                  title="Search Google for company info"
+                                >
+                                  Google
+                                </a>
+                                <a
+                                  href={`https://www.linkedin.com/search/results/companies/?keywords=${encodeURIComponent(app.seller_name || app.artist)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center px-1.5 py-0.5 text-xs font-medium bg-sky-100 text-sky-700 rounded hover:bg-sky-200"
+                                  title="Search LinkedIn for company"
+                                >
+                                  LinkedIn
+                                </a>
+                                <a
+                                  href={`https://www.crunchbase.com/textsearch?q=${encodeURIComponent(app.seller_name || app.artist)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center px-1.5 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded hover:bg-orange-200"
+                                  title="Search Crunchbase for funding info"
+                                >
+                                  Crunchbase
+                                </a>
+                              </div>
+                            </div>
                           </td>
                           <td className="px-4 py-3 text-sm">
                             <div className="flex items-center gap-2">

@@ -13,6 +13,9 @@ import type {
   AppStoreCategories,
   AppStoreScanResult,
   AppStoreApp,
+  AppStoreScanHistory,
+  AppStoreScanCreate,
+  AppStoreScanListResponse,
   ProficiencyTestResult,
 } from '@/types';
 
@@ -298,6 +301,28 @@ class ApiClient {
   async getAppStoreApp(appId: string, country: string = 'us'): Promise<AppStoreApp> {
     const params = new URLSearchParams({ country });
     return this.request<AppStoreApp>(`/app-store/app/${appId}?${params.toString()}`);
+  }
+
+  // App Store Scan History (persisted)
+  async saveAppStoreScan(data: AppStoreScanCreate): Promise<AppStoreScanHistory> {
+    return this.request<AppStoreScanHistory>('/app-store/scans', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async listAppStoreScans(skip = 0, limit = 20): Promise<AppStoreScanListResponse> {
+    return this.request<AppStoreScanListResponse>(
+      `/app-store/scans?skip=${skip}&limit=${limit}`
+    );
+  }
+
+  async getAppStoreScan(scanId: number): Promise<AppStoreScanHistory> {
+    return this.request<AppStoreScanHistory>(`/app-store/scans/${scanId}`);
+  }
+
+  async deleteAppStoreScan(scanId: number): Promise<void> {
+    return this.request<void>(`/app-store/scans/${scanId}`, { method: 'DELETE' });
   }
 }
 

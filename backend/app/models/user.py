@@ -19,3 +19,4 @@ class User(Base):
     # Relationships
     audits = relationship("Audit", back_populates="user", cascade="all, delete-orphan")
     glossaries = relationship("Glossary", back_populates="user", cascade="all, delete-orphan")
+    app_store_scans = relationship("AppStoreScan", back_populates="user", cascade="all, delete-orphan")

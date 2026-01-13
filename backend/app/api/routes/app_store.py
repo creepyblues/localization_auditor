@@ -2,10 +2,17 @@
 App Store Scanner API Routes
 """
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends, status
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
 from typing import Optional
 import logging
 
+from app.core.database import get_db
+from app.models.user import User
+from app.models.app_store_scan import AppStoreScan
+from app.schemas.app_store_scan import AppStoreScanCreate, AppStoreScanResponse, AppStoreScanListResponse
+from app.api.deps import get_current_user
 from app.services.app_store_scanner import AppStoreScanner
 
 logger = logging.getLogger(__name__)
@@ -104,3 +111,103 @@ async def get_app_details(
             status_code=500,
             detail=f"Error fetching app details: {str(e)}"
         )
+
+
+# ============== Scan History CRUD Endpoints ==============
+
+@router.post("/scans", response_model=AppStoreScanResponse, status_code=status.HTTP_201_CREATED)
+async def save_scan(
+    scan_data: AppStoreScanCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Save an app store scan to history."""
+    scan = AppStoreScan(
+        user_id=current_user.id,
+        category=scan_data.category,
+        feed_type=scan_data.feed_type,
+        country=scan_data.country,
+        total_apps=scan_data.total_apps,
+        unique_languages=scan_data.unique_languages,
+        result=scan_data.result
+    )
+    db.add(scan)
+    await db.commit()
+    await db.refresh(scan)
+    return scan
+
+
+@router.get("/scans", response_model=AppStoreScanListResponse)
+async def list_scans(
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """List all saved scans for the current user."""
+    # Get total count
+    count_result = await db.execute(
+        select(func.count(AppStoreScan.id)).where(AppStoreScan.user_id == current_user.id)
+    )
+    total = count_result.scalar()
+
+    # Get paginated results
+    result = await db.execute(
+        select(AppStoreScan)
+        .where(AppStoreScan.user_id == current_user.id)
+        .order_by(AppStoreScan.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    scans = result.scalars().all()
+
+    return AppStoreScanListResponse(scans=scans, total=total)
+
+
+@router.get("/scans/{scan_id}", response_model=AppStoreScanResponse)
+async def get_scan(
+    scan_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Get a specific saved scan."""
+    result = await db.execute(
+        select(AppStoreScan).where(
+            AppStoreScan.id == scan_id,
+            AppStoreScan.user_id == current_user.id
+        )
+    )
+    scan = result.scalar_one_or_none()
+
+    if not scan:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Scan not found"
+        )
+
+    return scan
+
+
+@router.delete("/scans/{scan_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_scan(
+    scan_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a saved scan."""
+    result = await db.execute(
+        select(AppStoreScan).where(
+            AppStoreScan.id == scan_id,
+            AppStoreScan.user_id == current_user.id
+        )
+    )
+    scan = result.scalar_one_or_none()
+
+    if not scan:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Scan not found"
+        )
+
+    await db.delete(scan)
+    await db.commit()

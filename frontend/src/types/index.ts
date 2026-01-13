@@ -283,6 +283,9 @@ export interface AppStoreApp {
   screenshots_ko: string[];
   description_ko: string;
   ko_store_available: boolean;
+  seller_url: string | null;
+  seller_name: string | null;
+  artist_view_url: string | null;
   error?: string;
 }
 
@@ -305,6 +308,32 @@ export interface AppStoreScanResult {
 export interface AppStoreCategories {
   categories: Record<string, number>;
   feed_types: Record<string, string>;
+}
+
+// Persisted scan history types
+export interface AppStoreScanHistory {
+  id: number;
+  category: string;
+  feed_type: string;
+  country: string;
+  total_apps: number;
+  unique_languages: number;
+  result: AppStoreScanResult;
+  created_at: string;
+}
+
+export interface AppStoreScanCreate {
+  category: string;
+  feed_type: string;
+  country: string;
+  total_apps: number;
+  unique_languages: number;
+  result: AppStoreScanResult;
+}
+
+export interface AppStoreScanListResponse {
+  scans: AppStoreScanHistory[];
+  total: number;
 }
 
 export const APP_STORE_CATEGORIES = [
