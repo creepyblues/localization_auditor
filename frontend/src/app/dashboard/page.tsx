@@ -86,6 +86,9 @@ function DashboardContent() {
               <span className="text-xs text-gray-400 font-normal">v{process.env.APP_VERSION}</span>
             </div>
             <div className="flex items-center gap-4">
+              <Link href="/app-store">
+                <Button variant="ghost">App Store Scanner</Button>
+              </Link>
               <Link href="/glossaries">
                 <Button variant="ghost">Glossaries</Button>
               </Link>

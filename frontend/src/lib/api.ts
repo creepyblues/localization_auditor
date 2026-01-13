@@ -8,6 +8,9 @@ import type {
   GlossaryTerm,
   GlossaryTermCreate,
   CSVImportResult,
+  AppStoreCategories,
+  AppStoreScanResult,
+  AppStoreApp,
 } from '@/types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
@@ -182,6 +185,30 @@ class ApiClient {
     }
 
     return response.json();
+  }
+
+  // App Store Scanner
+  async getAppStoreCategories(): Promise<AppStoreCategories> {
+    return this.request<AppStoreCategories>('/app-store/categories');
+  }
+
+  async scanAppStoreCategory(
+    category: string,
+    feedType: string = 'free',
+    limit: number = 50,
+    country: string = 'us'
+  ): Promise<AppStoreScanResult> {
+    const params = new URLSearchParams({
+      feed_type: feedType,
+      limit: limit.toString(),
+      country,
+    });
+    return this.request<AppStoreScanResult>(`/app-store/scan/${category}?${params.toString()}`);
+  }
+
+  async getAppStoreApp(appId: string, country: string = 'us'): Promise<AppStoreApp> {
+    const params = new URLSearchParams({ country });
+    return this.request<AppStoreApp>(`/app-store/app/${appId}?${params.toString()}`);
   }
 }
 

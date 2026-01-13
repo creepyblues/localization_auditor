@@ -243,3 +243,61 @@ export const SOURCE_LANGUAGES = [
   { value: 'de', label: 'German' },
   { value: 'pt', label: 'Portuguese' },
 ];
+
+// App Store Scanner Types
+export interface AppStoreApp {
+  app_id: string;
+  app_name: string;
+  artist: string;
+  bundle_id: string;
+  languages: string[];
+  language_count: number;
+  price: number;
+  currency: string;
+  version: string;
+  release_date: string;
+  current_version_release_date: string;
+  average_user_rating: number;
+  user_rating_count: number;
+  error?: string;
+}
+
+export interface AppStoreScanStatistics {
+  total_unique_languages: number;
+  all_languages_found: string[];
+  apps_by_language_count: Record<string, number>;
+  average_languages_per_app: number;
+}
+
+export interface AppStoreScanResult {
+  category: string;
+  feed_type: string;
+  country_code: string;
+  total_apps_scanned: number;
+  apps: AppStoreApp[];
+  statistics: AppStoreScanStatistics;
+}
+
+export interface AppStoreCategories {
+  categories: Record<string, number>;
+  feed_types: Record<string, string>;
+}
+
+export const APP_STORE_CATEGORIES = [
+  { value: 'health_fitness', label: 'Health & Fitness' },
+  { value: 'entertainment', label: 'Entertainment' },
+  { value: 'education', label: 'Education' },
+  { value: 'games', label: 'Games' },
+  { value: 'business', label: 'Business' },
+  { value: 'lifestyle', label: 'Lifestyle' },
+  { value: 'productivity', label: 'Productivity' },
+  { value: 'social_networking', label: 'Social Networking' },
+  { value: 'travel', label: 'Travel' },
+  { value: 'utilities', label: 'Utilities' },
+];
+
+export const APP_STORE_FEED_TYPES = [
+  { value: 'free', label: 'Top Free' },
+  { value: 'paid', label: 'Top Paid' },
+  { value: 'grossing', label: 'Top Grossing' },
+];
