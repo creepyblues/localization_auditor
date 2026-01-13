@@ -2,7 +2,6 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
@@ -10,10 +9,11 @@ import { Card, CardContent } from '@/components/ui/Card';
 import { AuditCard } from '@/components/audit/AuditCard';
 import { CreateAuditForm } from '@/components/audit/CreateAuditForm';
 import { LocalTestForm } from '@/components/audit/LocalTestForm';
+import { Header } from '@/components/layout/Header';
 import type { Audit } from '@/types';
 
 function DashboardContent() {
-  const { user, loading: authLoading, logout } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [audits, setAudits] = useState<Audit[]>([]);
@@ -79,32 +79,7 @@ function DashboardContent() {
 
   return (
     <div className="min-h-screen">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-gray-900">Localization Auditor</h1>
-              <span className="text-xs text-gray-400 font-normal">v{process.env.APP_VERSION}</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <Link href="/app-store">
-                <Button variant="ghost">App Store Scanner</Button>
-              </Link>
-              <Link href="/research">
-                <Button variant="ghost">Research</Button>
-              </Link>
-              <Link href="/glossaries">
-                <Button variant="ghost">Glossaries</Button>
-              </Link>
-              <span className="text-sm text-gray-500">{user.email}</span>
-              <Button variant="ghost" onClick={logout}>
-                Logout
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
+      <Header />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {showLocalTest ? (

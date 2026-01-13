@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Select } from '@/components/ui/Select';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
+import { Header } from '@/components/layout/Header';
 import { INDUSTRIES } from '@/types';
 import type { Glossary, GlossaryTermCreate, CSVImportResult } from '@/types';
 
@@ -156,22 +156,7 @@ export default function GlossariesPage() {
 
   return (
     <div className="min-h-screen">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold text-gray-900">Localization Auditor</h1>
-            <div className="flex items-center gap-4">
-              <Link href="/dashboard">
-                <Button variant="ghost">Dashboard</Button>
-              </Link>
-              <Link href="/app-store">
-                <Button variant="ghost">App Store Scanner</Button>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </header>
+      <Header />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex items-center justify-between mb-8">

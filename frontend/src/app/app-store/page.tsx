@@ -2,16 +2,27 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
+import { Header } from '@/components/layout/Header';
 import type { AppStoreScanResult } from '@/types';
 import { APP_STORE_CATEGORIES, APP_STORE_FEED_TYPES } from '@/types';
 
+interface ScanHistoryItem {
+  id: string;
+  timestamp: number;
+  category: string;
+  feedType: string;
+  country: string;
+  totalApps: number;
+  uniqueLanguages: number;
+  result: AppStoreScanResult;
+}
+
 export default function AppStorePage() {
-  const { user, loading: authLoading, logout } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
   const [scanResult, setScanResult] = useState<AppStoreScanResult | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -23,6 +34,29 @@ export default function AppStorePage() {
   const [limit, setLimit] = useState(50);
   const [country, setCountry] = useState('us');
 
+  // Filter state
+  const [selectedLanguages, setSelectedLanguages] = useState<string[]>([]);
+
+  // History state
+  const [scanHistory, setScanHistory] = useState<ScanHistoryItem[]>([]);
+  const [showAllHistory, setShowAllHistory] = useState(false);
+
+  // Load history from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('appStoreScanHistory');
+    if (saved) {
+      setScanHistory(JSON.parse(saved));
+    }
+  }, []);
+
+  const toggleLanguageFilter = (lang: string) => {
+    setSelectedLanguages(prev =>
+      prev.includes(lang)
+        ? prev.filter(l => l !== lang)
+        : [...prev, lang]
+    );
+  };
+
   useEffect(() => {
     if (!authLoading && !user) {
       router.push('/login');
@@ -33,10 +67,26 @@ export default function AppStorePage() {
     setScanning(true);
     setError(null);
     setScanResult(null);
+    setSelectedLanguages([]);
 
     try {
       const result = await api.scanAppStoreCategory(category, feedType, limit, country);
       setScanResult(result);
+
+      // Save to history
+      const historyItem: ScanHistoryItem = {
+        id: Date.now().toString(),
+        timestamp: Date.now(),
+        category,
+        feedType,
+        country,
+        totalApps: result.total_apps_scanned,
+        uniqueLanguages: result.statistics.total_unique_languages,
+        result,
+      };
+      const newHistory = [historyItem, ...scanHistory];
+      setScanHistory(newHistory);
+      localStorage.setItem('appStoreScanHistory', JSON.stringify(newHistory));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to scan App Store');
       console.error('Scan error:', err);
@@ -58,6 +108,19 @@ export default function AppStorePage() {
     URL.revokeObjectURL(url);
   };
 
+  const loadHistoryItem = (item: ScanHistoryItem) => {
+    setScanResult(item.result);
+    setSelectedLanguages([]);
+    setCategory(item.category);
+    setFeedType(item.feedType);
+    setCountry(item.country);
+  };
+
+  const clearHistory = () => {
+    setScanHistory([]);
+    localStorage.removeItem('appStoreScanHistory');
+  };
+
   if (authLoading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -68,28 +131,7 @@ export default function AppStorePage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold text-gray-900">Localization Auditor</h1>
-            </div>
-            <div className="flex items-center gap-4">
-              <Link href="/dashboard">
-                <Button variant="ghost">Dashboard</Button>
-              </Link>
-              <Link href="/glossaries">
-                <Button variant="ghost">Glossaries</Button>
-              </Link>
-              <span className="text-sm text-gray-500">{user.email}</span>
-              <Button variant="ghost" onClick={logout}>
-                Logout
-              </Button>
-            </div>
-          </div>
-        </div>
-      </header>
+      <Header />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
@@ -194,6 +236,52 @@ export default function AppStorePage() {
           </CardContent>
         </Card>
 
+        {/* Scan History */}
+        {scanHistory.length > 0 && (
+          <Card className="mb-8">
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-gray-700">Recent Scans</h3>
+                <button
+                  onClick={clearHistory}
+                  className="text-xs text-gray-400 hover:text-red-500"
+                >
+                  Clear
+                </button>
+              </div>
+              <div className="space-y-2">
+                {(showAllHistory ? scanHistory : scanHistory.slice(0, 5)).map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => loadHistoryItem(item)}
+                    className="w-full text-left px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded-md text-sm flex justify-between items-center"
+                  >
+                    <div className="flex flex-col">
+                      <span>
+                        {item.category.replace('_', ' ')} • {item.feedType} • {item.country.toUpperCase()}
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {new Date(item.timestamp).toLocaleString()}
+                      </span>
+                    </div>
+                    <span className="text-gray-500 text-xs">
+                      {item.totalApps} apps • {item.uniqueLanguages} langs
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {scanHistory.length > 5 && (
+                <button
+                  onClick={() => setShowAllHistory(!showAllHistory)}
+                  className="mt-3 text-sm text-blue-600 hover:text-blue-800"
+                >
+                  {showAllHistory ? 'Show less' : `Show all (${scanHistory.length})`}
+                </button>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Error Message */}
         {error && (
           <Card className="mb-8 border-red-200 bg-red-50">
@@ -259,55 +347,85 @@ export default function AppStorePage() {
                 <h3 className="text-lg font-semibold mb-4">Languages Found</h3>
                 <div className="flex flex-wrap gap-2">
                   {scanResult.statistics.all_languages_found.map((lang) => (
-                    <span
+                    <button
                       key={lang}
-                      className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium"
+                      onClick={() => toggleLanguageFilter(lang)}
+                      className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                        selectedLanguages.includes(lang)
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-blue-100 text-blue-800 hover:bg-blue-200'
+                      }`}
                     >
                       {lang}
-                    </span>
+                    </button>
                   ))}
+                  {selectedLanguages.length > 0 && (
+                    <button
+                      onClick={() => setSelectedLanguages([])}
+                      className="px-3 py-1 bg-gray-200 text-gray-600 rounded-full text-sm font-medium hover:bg-gray-300 transition-colors"
+                    >
+                      Clear ({selectedLanguages.length})
+                    </button>
+                  )}
                 </div>
               </CardContent>
             </Card>
 
             {/* Apps Table */}
-            <Card>
-              <CardContent className="py-6">
-                <h3 className="text-lg font-semibold mb-4">
-                  Top {scanResult.total_apps_scanned} Apps
-                </h3>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          #
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          App Name
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Developer
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Languages
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Rating
-                        </th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Reviews
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {scanResult.apps.map((app, idx) => (
+            {(() => {
+              const filteredApps = selectedLanguages.length > 0
+                ? scanResult.apps.filter(app =>
+                    selectedLanguages.some(lang => app.languages.includes(lang))
+                  )
+                : scanResult.apps;
+
+              return (
+                <Card>
+                  <CardContent className="py-6">
+                    <h3 className="text-lg font-semibold mb-4">
+                      {selectedLanguages.length > 0
+                        ? `${filteredApps.length} of ${scanResult.total_apps_scanned} Apps`
+                        : `Top ${scanResult.total_apps_scanned} Apps`}
+                    </h3>
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              #
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              App Name
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Developer
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Languages
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Rating
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                              Reviews
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {filteredApps.map((app, idx) => (
                         <tr key={app.app_id} className="hover:bg-gray-50">
                           <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                             {idx + 1}
                           </td>
-                          <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                            {app.app_name}
+                          <td className="px-4 py-3 text-sm font-medium">
+                            <a
+                              href={app.track_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 hover:text-blue-800 hover:underline"
+                            >
+                              {app.app_name}
+                            </a>
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-500">
                             {app.artist}
@@ -317,6 +435,16 @@ export default function AppStorePage() {
                               <span className="font-semibold text-blue-600">
                                 {app.language_count}
                               </span>
+                              {app.languages.includes('KO') && (
+                                <span className="px-1.5 py-0.5 text-xs font-medium bg-green-100 text-green-800 rounded">
+                                  KR
+                                </span>
+                              )}
+                              {app.languages.includes('JA') && (
+                                <span className="px-1.5 py-0.5 text-xs font-medium bg-red-100 text-red-800 rounded">
+                                  JA
+                                </span>
+                              )}
                               <span className="text-xs text-gray-400">
                                 {app.languages.slice(0, 3).join(', ')}
                                 {app.languages.length > 3 && ',...'}
@@ -337,12 +465,14 @@ export default function AppStorePage() {
                             {app.user_rating_count?.toLocaleString() || 'N/A'}
                           </td>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })()}
           </>
         )}
       </main>
