@@ -39,6 +39,14 @@ from app.services.scraper import ScrapedContent, WebScraper
 
 logger = logging.getLogger(__name__)
 
+
+class BlockedPageError(Exception):
+    """Raised when a page appears to be blocked (CAPTCHA, Cloudflare, etc.)"""
+    def __init__(self, reason: str, screenshot_base64: str):
+        self.reason = reason
+        self.screenshot_base64 = screenshot_base64
+        super().__init__(f"Page access blocked: {reason}")
+
 settings = get_settings()
 
 
@@ -83,7 +91,7 @@ Your task is to evaluate localized website content against the original source c
    - Use these terms to validate translation consistency
 
 3. **Analyze Content**
-   Evaluate across 8 dimensions (score 0-100 each):
+   Evaluate across 9 dimensions (score 0-100 each):
 
    - **CORRECTNESS**: Translation accuracy, grammar, spelling, terminology fidelity
    - **CULTURAL_RELEVANCE**: Cultural adaptation, idioms, imagery appropriateness, tone
@@ -93,6 +101,14 @@ Your task is to evaluate localized website content against the original source c
    - **COMPLETENESS**: Detection of missing/untranslated content, placeholders
    - **UI_UX**: Date/time formats, currency, measurements, layout considerations
    - **SEO**: Meta tags, keywords localization, title optimization
+   - **LANGUAGE_PROFICIENCY**: Assess whether content appears natively written or translated
+     * Lexical sophistication: Is vocabulary range natural and varied, or limited/repetitive?
+     * Idiomatic fluency: Are expressions natural, or literally translated?
+     * Cultural authenticity: Are cultural references appropriate and current?
+     * Register consistency: Is formality level consistent and appropriate?
+     * Structural naturalness: Do sentence patterns feel native?
+     * Collocational accuracy: Are word combinations natural?
+     * Score: 90-100=Native/expert, 75-89=Near-native, 60-74=Competent, 40-59=Developing, 0-39=Needs improvement
 
 4. **Provide Detailed Feedback**
    For each dimension:
@@ -169,13 +185,24 @@ The JSON MUST follow this EXACT structure:
       "findings": [...],
       "good_examples": [...],
       "recommendations": [...]
+    },
+    {
+      "dimension": "LANGUAGE_PROFICIENCY",
+      "score": <int 0-100>,
+      "findings": [
+        {"issue": "<description of non-native pattern>", "original": "<source text>", "localized": "<translated text showing issue>", "suggestion": "<more native phrasing>", "severity": "high|medium|low"}
+      ],
+      "good_examples": [
+        {"description": "<why this sounds native>", "original": "<source text>", "localized": "<native-sounding translation>"}
+      ],
+      "recommendations": ["<suggestion to improve native quality>"]
     }
   ]
 }
 ```
 
 IMPORTANT:
-- Include ALL 8 dimensions in the exact order shown
+- Include ALL 9 dimensions in the exact order shown
 - The overall_score should be the average of all dimension scores
 - Each finding MUST have ALL fields: issue, original, localized, suggestion, severity
   - "original" = the exact text from the source page
@@ -214,7 +241,7 @@ Instead, you will assess whether the content appears to be a quality translation
    - Are date/currency/number formats properly localized?
 
 4. **Analyze Content**
-   Evaluate across 7 dimensions (score 0-100 each):
+   Evaluate across 8 dimensions (score 0-100 each):
 
    - **CORRECTNESS**: Grammar, spelling, natural expression in target language
    - **CULTURAL_RELEVANCE**: Cultural adaptation, appropriate idioms, tone for target audience
@@ -223,6 +250,14 @@ Instead, you will assess whether the content appears to be a quality translation
    - **COMPLETENESS**: No placeholder text, complete sentences, no broken content
    - **UI_UX**: Date/time formats, currency, measurements properly localized
    - **SEO**: Meta tags, keywords appropriate for target language/region
+   - **LANGUAGE_PROFICIENCY**: Assess whether content appears natively written or translated
+     * Lexical sophistication: Is vocabulary range natural and varied, or limited/repetitive?
+     * Idiomatic fluency: Are expressions natural, or literally translated?
+     * Cultural authenticity: Are cultural references appropriate and current?
+     * Register consistency: Is formality level consistent and appropriate?
+     * Structural naturalness: Do sentence patterns feel native?
+     * Collocational accuracy: Are word combinations natural?
+     * Score: 90-100=Native/expert, 75-89=Near-native, 60-74=Competent, 40-59=Developing, 0-39=Needs improvement
 
    Note: CONSISTENCY dimension is not applicable for standalone audits (no source to compare against).
 
@@ -294,13 +329,24 @@ The JSON MUST follow this EXACT structure:
       "findings": [...],
       "good_examples": [...],
       "recommendations": [...]
+    },
+    {
+      "dimension": "LANGUAGE_PROFICIENCY",
+      "score": <int 0-100>,
+      "findings": [
+        {"issue": "<description of non-native pattern>", "text": "<text showing issue>", "suggestion": "<more native phrasing>", "severity": "high|medium|low"}
+      ],
+      "good_examples": [
+        {"description": "<why this sounds native>", "text": "<native-sounding text>"}
+      ],
+      "recommendations": ["<suggestion to improve native quality>"]
     }
   ]
 }
 ```
 
 IMPORTANT:
-- Include ALL 7 dimensions in the exact order shown (CONSISTENCY is excluded)
+- Include ALL 8 dimensions in the exact order shown (CONSISTENCY is excluded)
 - The overall_score should be the average of all dimension scores
 - Each finding MUST have: issue, text, suggestion, severity
 - Each good_example MUST have: description, text
@@ -334,6 +380,14 @@ Consider:
 - **COMPLETENESS**: Detection of missing/untranslated content, placeholders
 - **UI_UX**: Date/time formats, currency, measurements, number formats
 - **SEO**: Meta tags, title optimization, keyword presence
+- **LANGUAGE_PROFICIENCY**: Assess whether content appears natively written or translated
+  * Lexical sophistication: Is vocabulary range natural and varied, or limited/repetitive?
+  * Idiomatic fluency: Are expressions natural, or literally translated?
+  * Cultural authenticity: Are cultural references appropriate and current?
+  * Register consistency: Is formality level consistent and appropriate?
+  * Structural naturalness: Do sentence patterns feel native?
+  * Collocational accuracy: Are word combinations natural?
+  * Score: 90-100=Native/expert, 75-89=Near-native, 60-74=Competent, 40-59=Developing, 0-39=Needs improvement
 
 ## Output Format
 
@@ -354,13 +408,13 @@ You MUST end your response with a JSON code block containing the audit results:
       ],
       "recommendations": ["<actionable recommendation>"]
     },
-    // ... include ALL 7 dimensions
+    // ... include ALL 8 dimensions
   ]
 }
 ```
 
 IMPORTANT:
-- Include ALL 7 dimensions in exact order: CORRECTNESS, CULTURAL_RELEVANCE, INDUSTRY_EXPERTISE, FLUENCY, COMPLETENESS, UI_UX, SEO
+- Include ALL 8 dimensions in exact order: CORRECTNESS, CULTURAL_RELEVANCE, INDUSTRY_EXPERTISE, FLUENCY, COMPLETENESS, UI_UX, SEO, LANGUAGE_PROFICIENCY
 - overall_score = average of all dimension scores
 - Each finding MUST have: issue, text, suggestion, severity
 - Each good_example MUST have: description, text
@@ -1252,13 +1306,40 @@ Remember to:
                     await progress_callback("Text scraping blocked. Taking screenshot...")
 
                 logger.info(f"Taking screenshot of {audit_url}")
+                screenshot_base64 = None
+
                 try:
                     screenshot_bytes = await scraper.take_screenshot(audit_url)
                     screenshot_base64 = base64.b64encode(screenshot_bytes).decode('utf-8')
                     logger.info(f"Screenshot captured: {len(screenshot_bytes)} bytes")
-                except Exception as e:
-                    logger.error(f"Screenshot also failed: {e}")
-                    raise Exception(f"Could not access website via scraping or screenshot: {e}")
+
+                except Exception as screenshot_error:
+                    # Normal screenshot failed (likely timeout) - try quick screenshot
+                    logger.warning(f"Normal screenshot failed: {screenshot_error}. Trying quick screenshot...")
+                    if progress_callback:
+                        await progress_callback("Page loading slowly. Taking quick snapshot...")
+
+                    try:
+                        screenshot_bytes = await scraper.take_quick_screenshot(audit_url)
+                        screenshot_base64 = base64.b64encode(screenshot_bytes).decode('utf-8')
+                        logger.info(f"Quick screenshot captured: {len(screenshot_bytes)} bytes")
+                    except Exception as quick_error:
+                        logger.error(f"Quick screenshot also failed: {quick_error}")
+                        raise Exception(f"Could not access website via scraping or screenshot: {screenshot_error}")
+
+                # Check if screenshot shows a blocked page using Claude Vision
+                if progress_callback:
+                    await progress_callback("Checking page accessibility...")
+
+                from app.services.scraper import detect_blocked_page_with_vision
+                is_blocked, blocked_reason = await detect_blocked_page_with_vision(
+                    screenshot_base64,
+                    settings.anthropic_api_key
+                )
+
+                if is_blocked:
+                    logger.warning(f"Blocked page detected: {blocked_reason}")
+                    raise BlockedPageError(blocked_reason, screenshot_base64)
 
         # Step 2: Build the prompt
         if progress_callback:
@@ -1421,6 +1502,513 @@ End your response with the JSON code block as specified in the system prompt.
         result.api_cost_usd = round(input_cost + output_cost, 4)
 
         logger.info(f"Audit complete: method={'screenshot' if use_screenshot else 'text'}, score={result.overall_score}, tokens={response.usage.input_tokens}+{response.usage.output_tokens}, cost=${result.api_cost_usd}")
+
+        return result
+
+    async def audit_with_screenshot(
+        self,
+        audit_url: str,
+        screenshot_base64: str,
+        source_language: str,
+        target_language: str,
+        industry: Optional[str] = None,
+        glossary_terms: Optional[list[dict]] = None,
+        progress_callback: Optional[Any] = None
+    ) -> AuditScore:
+        """
+        Run audit using a pre-captured screenshot.
+        Used for force-proceed on blocked pages (skips scraping and block detection).
+        """
+        start_time = time.time()
+
+        if progress_callback:
+            await progress_callback("Analyzing screenshot with AI...")
+
+        # Format glossary terms
+        glossary_text = ""
+        if glossary_terms:
+            glossary_text = "\n\n## Industry Glossary\n\n"
+            glossary_text += "Use these terms to validate terminology:\n"
+            for t in glossary_terms[:50]:
+                glossary_text += f"- \"{t['source_term']}\" -> \"{t['target_term']}\""
+                if t.get('context'):
+                    glossary_text += f" (context: {t['context']})"
+                glossary_text += "\n"
+
+        # Screenshot-based analysis prompt
+        prompt = f"""Please perform a back-translation quality assessment on this localized website screenshot.
+
+**URL:** {audit_url}
+**Original Language (translated FROM):** {source_language}
+**Target Language (translated TO):** {target_language}
+**Industry:** {industry or 'General'}
+{glossary_text}
+
+## Instructions
+
+Analyze the screenshot and assess whether the visible content appears to be a quality translation from {source_language} to {target_language}.
+
+Note: This screenshot may show a partially accessible or blocked page. Analyze whatever content is visible.
+
+Look for:
+- Text that reads naturally in {target_language}
+- Signs of machine translation (awkward phrasing)
+- Cultural adaptation issues
+- UI/UX localization (dates, numbers, currency formats)
+- Missing or placeholder text
+
+Evaluate all 7 dimensions and provide:
+1. Score (0-100) for each dimension
+2. Specific findings with problematic text and suggestions
+3. Good examples of well-done translations
+4. Actionable recommendations
+
+End your response with the JSON code block as specified in the system prompt.
+"""
+
+        messages = [{
+            "role": "user",
+            "content": [
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/png",
+                        "data": screenshot_base64
+                    }
+                },
+                {
+                    "type": "text",
+                    "text": prompt
+                }
+            ]
+        }]
+
+        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+
+        try:
+            response = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=8192,
+                system=DIRECT_API_SYSTEM_PROMPT,
+                messages=messages
+            )
+        except Exception as e:
+            logger.error(f"Claude API error: {e}")
+            raise Exception(f"AI analysis failed: {e}")
+
+        response_text = ""
+        for block in response.content:
+            if hasattr(block, 'text'):
+                response_text += block.text
+
+        if progress_callback:
+            await progress_callback("Processing results...")
+
+        result = parse_agent_output(response_text, standalone=True)
+        result.analysis_method = "screenshot"
+        result.audit_screenshot = screenshot_base64
+
+        # Calculate timing and costs
+        duration_ms = int((time.time() - start_time) * 1000)
+        result.api_duration_ms = duration_ms
+        result.api_input_tokens = response.usage.input_tokens
+        result.api_output_tokens = response.usage.output_tokens
+
+        # Calculate cost (Claude Sonnet pricing)
+        input_cost = (response.usage.input_tokens / 1_000_000) * 3.0
+        output_cost = (response.usage.output_tokens / 1_000_000) * 15.0
+        result.api_cost_usd = round(input_cost + output_cost, 4)
+
+        logger.info(f"Audit with screenshot complete: score={result.overall_score}, cost=${result.api_cost_usd}")
+
+        return result
+
+    async def audit_uploaded_images(
+        self,
+        uploaded_images: list[dict],
+        audit_type: str,
+        source_language: str,
+        target_language: str,
+        industry: Optional[str] = None,
+        glossary_terms: Optional[list[dict]] = None,
+        progress_callback: Optional[Any] = None
+    ) -> AuditScore:
+        """
+        Run audit on user-uploaded images using Claude Vision.
+
+        Args:
+            uploaded_images: List of {label: "original"|"localized", data: base64, filename: str}
+            audit_type: "comparison" or "standalone"
+            source_language: Source language code (e.g., "en")
+            target_language: Target language code (e.g., "ko")
+            industry: Optional industry context
+            glossary_terms: Optional glossary terms for validation
+            progress_callback: Optional async callback for progress updates
+        """
+        start_time = time.time()
+
+        if progress_callback:
+            await progress_callback("Processing uploaded images...")
+
+        # Separate images by label
+        original_images = [img for img in uploaded_images if img["label"] == "original"]
+        localized_images = [img for img in uploaded_images if img["label"] == "localized"]
+
+        # Format glossary terms
+        glossary_text = ""
+        if glossary_terms:
+            glossary_text = "\n\n## Industry Glossary\n\n"
+            glossary_text += "Use these terms to validate terminology:\n"
+            for t in glossary_terms[:50]:
+                glossary_text += f"- \"{t['source_term']}\" -> \"{t['target_term']}\""
+                if t.get('context'):
+                    glossary_text += f" (context: {t['context']})"
+                glossary_text += "\n"
+
+        # Build message content with all images
+        message_content = []
+
+        # Add original images (if comparison audit)
+        if audit_type == "comparison" and original_images:
+            for idx, img in enumerate(original_images):
+                message_content.append({
+                    "type": "text",
+                    "text": f"## Original Image {idx + 1} ({img['filename']})"
+                })
+                message_content.append({
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/png",
+                        "data": img["data"]
+                    }
+                })
+
+        # Add localized images
+        for idx, img in enumerate(localized_images):
+            message_content.append({
+                "type": "text",
+                "text": f"## Localized Image {idx + 1} ({img['filename']})"
+            })
+            message_content.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": "image/png",
+                    "data": img["data"]
+                }
+            })
+
+        # Build prompt based on audit type
+        if audit_type == "comparison":
+            prompt = f"""Please perform a localization quality assessment comparing the original and localized images provided above.
+
+**Original Language:** {source_language}
+**Target Language:** {target_language}
+**Industry:** {industry or 'General'}
+{glossary_text}
+
+## Instructions
+
+1. Extract and compare text content from the original and localized images
+2. Evaluate the translation quality across all 9 dimensions
+3. Identify specific translation issues with the original text and localized text
+4. Provide actionable recommendations
+
+Evaluate all 9 dimensions:
+- CORRECTNESS: Translation accuracy, grammar, spelling
+- CULTURAL_RELEVANCE: Cultural adaptation, idioms, tone
+- INDUSTRY_EXPERTISE: Domain terminology accuracy
+- FLUENCY: Natural reading flow
+- CONSISTENCY: Uniform terminology usage
+- COMPLETENESS: Missing/untranslated content
+- UI_UX: Date, currency, measurement formats
+- SEO: Meta tags, keywords (if visible)
+- LANGUAGE_PROFICIENCY: Assess native vs translated quality (lexical sophistication, idiomatic fluency, cultural authenticity, register consistency, structural naturalness, collocational accuracy)
+
+End your response with the JSON code block as specified in the system prompt.
+"""
+        else:
+            # Standalone audit
+            prompt = f"""Please perform a back-translation quality assessment on the localized images provided above.
+
+**Original Language (translated FROM):** {source_language}
+**Target Language (translated TO):** {target_language}
+**Industry:** {industry or 'General'}
+{glossary_text}
+
+## Instructions
+
+1. Extract visible text content from the localized images
+2. Assess whether the content appears to be a quality translation from {source_language}
+3. Look for signs of machine translation, awkward phrasing, or poor localization
+4. Evaluate all 8 dimensions (CONSISTENCY excluded for standalone audits)
+
+Dimensions to evaluate:
+- CORRECTNESS: Grammar, spelling, natural expression
+- CULTURAL_RELEVANCE: Cultural adaptation, appropriate idioms
+- INDUSTRY_EXPERTISE: Domain terminology appropriateness
+- FLUENCY: Natural reading flow, no signs of literal translation
+- COMPLETENESS: No placeholder text, complete content
+- UI_UX: Date, currency, measurement formats
+- SEO: Meta tags, keywords (if visible)
+- LANGUAGE_PROFICIENCY: Assess native vs translated quality (lexical sophistication, idiomatic fluency, cultural authenticity, register consistency, structural naturalness, collocational accuracy)
+
+End your response with the JSON code block as specified in the system prompt.
+"""
+
+        message_content.append({
+            "type": "text",
+            "text": prompt
+        })
+
+        messages = [{"role": "user", "content": message_content}]
+
+        # Call Claude API
+        if progress_callback:
+            await progress_callback("Running AI analysis on images...")
+
+        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+
+        try:
+            # Use comparison prompt for comparison audits, standalone prompt for standalone
+            system_prompt = AGENT_SYSTEM_PROMPT if audit_type == "comparison" else DIRECT_API_SYSTEM_PROMPT
+            response = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=8192,
+                system=system_prompt,
+                messages=messages
+            )
+        except Exception as e:
+            logger.error(f"Claude API error: {e}")
+            raise Exception(f"AI analysis failed: {e}")
+
+        # Extract response text
+        response_text = ""
+        for block in response.content:
+            if hasattr(block, 'text'):
+                response_text += block.text
+
+        if progress_callback:
+            await progress_callback("Processing results...")
+
+        # Parse results - standalone flag determines if CONSISTENCY is expected
+        result = parse_agent_output(response_text, standalone=(audit_type == "standalone"))
+        result.analysis_method = "image_upload"
+
+        # Calculate timing and costs
+        duration_ms = int((time.time() - start_time) * 1000)
+        result.api_duration_ms = duration_ms
+        result.api_input_tokens = response.usage.input_tokens
+        result.api_output_tokens = response.usage.output_tokens
+
+        # Calculate cost (Claude Sonnet pricing)
+        input_cost = (response.usage.input_tokens / 1_000_000) * 3.0
+        output_cost = (response.usage.output_tokens / 1_000_000) * 15.0
+        result.api_cost_usd = round(input_cost + output_cost, 4)
+
+        logger.info(f"Image upload audit complete: score={result.overall_score}, cost=${result.api_cost_usd}")
+
+        return result
+
+    async def run_proficiency_test(
+        self,
+        content: str | None = None,
+        image_data: str | None = None,
+        target_language: str = "en",
+        progress_callback: Optional[Any] = None
+    ) -> dict:
+        """
+        Run a focused language proficiency test.
+
+        This is a lightweight assessment that ONLY evaluates language proficiency,
+        without the full 9-dimension audit.
+
+        Args:
+            content: Text content to analyze (from URL scraping)
+            image_data: Base64-encoded image to analyze
+            target_language: The language being evaluated
+            progress_callback: Optional async callback for progress updates
+
+        Returns:
+            dict with score, verdict, findings, good_examples, recommendations
+        """
+        start_time = time.time()
+
+        if progress_callback:
+            await progress_callback("Running language proficiency assessment...")
+
+        # Build the prompt
+        system_prompt = """You are an expert linguist specializing in detecting whether text was written by a native speaker or translated.
+
+Your task is to assess the LANGUAGE PROFICIENCY of the provided content - specifically, whether it appears to be written by a native speaker or shows signs of translation ("translationese").
+
+## Evaluation Criteria
+
+Assess these 6 indicators of language proficiency:
+
+1. **Lexical Sophistication**: Is vocabulary range natural and varied, or limited/repetitive?
+2. **Idiomatic Fluency**: Are expressions natural, or literally translated from another language?
+3. **Cultural Authenticity**: Are cultural references appropriate and current for the target audience?
+4. **Register Consistency**: Is the formality level consistent and appropriate throughout?
+5. **Structural Naturalness**: Do sentence patterns feel native, or show source-language influence?
+6. **Collocational Accuracy**: Are word combinations natural (e.g., "make a decision" vs "do a decision")?
+
+## Score Interpretation
+
+- 90-100: Native/Expert - indistinguishable from native writing
+- 75-89: Near-Native - professional quality with minor non-native markers
+- 60-74: Competent - understandable but noticeable translation patterns
+- 40-59: Developing - clear translationese, needs improvement
+- 0-39: Needs Improvement - significant translationese, major rework needed
+
+## Output Format
+
+You MUST end your response with a JSON code block:
+
+```json
+{
+  "score": <int 0-100>,
+  "verdict": "Native/Expert" | "Near-Native" | "Competent" | "Developing" | "Needs Improvement",
+  "findings": [
+    {"issue": "<description of non-native pattern>", "text": "<example text>", "suggestion": "<more native phrasing>", "severity": "high|medium|low"}
+  ],
+  "good_examples": [
+    {"description": "<why this sounds native>", "text": "<native-sounding text>"}
+  ],
+  "recommendations": ["<suggestion to improve native quality>"]
+}
+```
+
+IMPORTANT:
+- Be specific - quote exact text from the content
+- Focus ONLY on language proficiency, not translation correctness
+- Provide actionable recommendations
+"""
+
+        # Build message content
+        message_content = []
+
+        if image_data:
+            message_content.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": "image/png",
+                    "data": image_data
+                }
+            })
+            message_content.append({
+                "type": "text",
+                "text": f"Please analyze the language proficiency of the text visible in this image. The content is in {target_language}."
+            })
+        elif content:
+            message_content.append({
+                "type": "text",
+                "text": f"""Please analyze the language proficiency of the following content in {target_language}:
+
+---
+{content[:15000]}
+---
+
+Assess whether this text appears to be written by a native speaker or shows signs of translation."""
+            })
+        else:
+            raise ValueError("Either content or image_data must be provided")
+
+        messages = [{"role": "user", "content": message_content}]
+
+        # Call Claude API
+        client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+
+        try:
+            response = client.messages.create(
+                model="claude-sonnet-4-20250514",
+                max_tokens=4096,
+                system=system_prompt,
+                messages=messages
+            )
+        except Exception as e:
+            logger.error(f"Claude API error in proficiency test: {e}")
+            raise Exception(f"AI analysis failed: {e}")
+
+        # Extract response text
+        response_text = ""
+        for block in response.content:
+            if hasattr(block, 'text'):
+                response_text += block.text
+
+        # Parse JSON from response
+        result = {
+            "score": None,
+            "verdict": None,
+            "findings": [],
+            "good_examples": [],
+            "recommendations": [],
+            "parse_error": None
+        }
+
+        # Try to extract JSON with robust parsing
+        json_match = re.search(r'```json\s*(.*?)\s*```', response_text, re.DOTALL)
+        if json_match:
+            json_str = json_match.group(1).strip()
+            parsed = None
+
+            # Try direct parsing first
+            try:
+                parsed = json.loads(json_str)
+            except json.JSONDecodeError as e:
+                logger.warning(f"Direct JSON parse failed: {e}")
+
+                # Try to fix common JSON issues
+                try:
+                    # Remove trailing commas before } or ]
+                    fixed_json = re.sub(r',\s*([}\]])', r'\1', json_str)
+                    # Fix single quotes to double quotes (simple case)
+                    fixed_json = fixed_json.replace("'", '"')
+                    parsed = json.loads(fixed_json)
+                    logger.info("JSON parsed after fixing common issues")
+                except json.JSONDecodeError as e2:
+                    logger.warning(f"JSON repair failed: {e2}")
+
+                    # Try to extract at least the score using regex
+                    score_match = re.search(r'"score"\s*:\s*(\d+)', json_str)
+                    verdict_match = re.search(r'"verdict"\s*:\s*"([^"]+)"', json_str)
+
+                    if score_match:
+                        result["score"] = int(score_match.group(1))
+                        logger.info(f"Extracted score via regex: {result['score']}")
+                    if verdict_match:
+                        result["verdict"] = verdict_match.group(1)
+                        logger.info(f"Extracted verdict via regex: {result['verdict']}")
+
+                    if not score_match:
+                        # Store the error for debugging
+                        result["parse_error"] = f"JSON parsing failed: {str(e)[:100]}"
+                        logger.error(f"Failed to parse proficiency test JSON: {e}")
+
+            if parsed:
+                result["score"] = parsed.get("score")
+                result["verdict"] = parsed.get("verdict")
+                result["findings"] = parsed.get("findings", [])
+                result["good_examples"] = parsed.get("good_examples", [])
+                result["recommendations"] = parsed.get("recommendations", [])
+        else:
+            logger.warning("No JSON code block found in proficiency test response")
+            result["parse_error"] = "No JSON code block found in response"
+
+        # Calculate timing and costs
+        duration_ms = int((time.time() - start_time) * 1000)
+        result["api_duration_ms"] = duration_ms
+        result["api_input_tokens"] = response.usage.input_tokens
+        result["api_output_tokens"] = response.usage.output_tokens
+
+        input_cost = (response.usage.input_tokens / 1_000_000) * 3.0
+        output_cost = (response.usage.output_tokens / 1_000_000) * 15.0
+        result["api_cost_usd"] = round(input_cost + output_cost, 4)
+
+        logger.info(f"Proficiency test complete: score={result['score']}, verdict={result['verdict']}")
 
         return result
 

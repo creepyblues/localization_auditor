@@ -52,6 +52,90 @@ def validate_content(content: ScrapedContent) -> tuple[bool, str]:
     return True, "OK"
 
 
+async def detect_blocked_page_with_vision(
+    screenshot_base64: str,
+    api_key: str
+) -> tuple[bool, Optional[str]]:
+    """
+    Use Claude Vision (Haiku) to detect if screenshot shows a blocked page.
+
+    Returns:
+        tuple: (is_blocked: bool, reason: Optional[str])
+        - is_blocked: True if page appears to be a CAPTCHA/challenge/blocked page
+        - reason: Description of what was detected (if blocked)
+    """
+    import anthropic
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    client = anthropic.Anthropic(api_key=api_key)
+
+    # Minimal prompt for cheap detection
+    detection_prompt = """Analyze this screenshot and determine if it shows a blocked or challenge page.
+
+Look for:
+- CAPTCHA challenges (checkbox, image puzzles, text entry)
+- Cloudflare "Just a moment" or "Checking your browser" pages
+- "Access Denied" or "403 Forbidden" messages
+- Bot detection challenges
+- "Please verify you are human" messages
+- Security verification screens
+- Blank pages with only error messages
+
+Respond with EXACTLY one of these formats:
+- If blocked: BLOCKED: [brief reason, max 50 words]
+- If accessible: ACCESSIBLE
+
+Examples:
+- BLOCKED: Cloudflare security challenge with "Checking if the site connection is secure" message
+- BLOCKED: CAPTCHA checkbox requiring user to verify they are not a robot
+- ACCESSIBLE
+"""
+
+    try:
+        response = client.messages.create(
+            model="claude-3-5-haiku-latest",  # Cheapest model for this check
+            max_tokens=100,  # Keep response short
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/png",
+                            "data": screenshot_base64
+                        }
+                    },
+                    {
+                        "type": "text",
+                        "text": detection_prompt
+                    }
+                ]
+            }]
+        )
+
+        response_text = ""
+        for block in response.content:
+            if hasattr(block, 'text'):
+                response_text += block.text
+
+        response_text = response_text.strip()
+        logger.info(f"Blocked page detection response: {response_text}")
+
+        if response_text.startswith("BLOCKED:"):
+            reason = response_text[8:].strip()
+            return True, reason
+        else:
+            return False, None
+
+    except Exception as e:
+        # If detection fails, log and return not blocked (fail open)
+        logger.warning(f"Blocked page detection failed: {e}")
+        return False, None
+
+
 def resize_image_for_claude(image_bytes: bytes, max_dimension: int = 1568) -> bytes:
     """Resize image to optimal size for Claude vision API.
 
@@ -388,8 +472,12 @@ class WebScraper:
 
             await page.goto(url, wait_until="domcontentloaded", timeout=timeout)
 
-            # Wait for dynamic content to load
-            await page.wait_for_load_state("networkidle", timeout=30000)
+            # Wait for dynamic content to load (with timeout handling)
+            try:
+                await page.wait_for_load_state("networkidle", timeout=30000)
+            except Exception:
+                # If networkidle times out, continue anyway - we'll capture what we have
+                pass
 
             # Check for and wait through Cloudflare challenge
             await self._wait_for_cloudflare(page)
@@ -410,6 +498,44 @@ class WebScraper:
             resized_screenshot = resize_image_for_claude(screenshot_bytes)
 
             return resized_screenshot
+
+        finally:
+            await page.close()
+            await context.close()
+
+    async def take_quick_screenshot(self, url: str, timeout: int = 15000) -> bytes:
+        """Take a quick screenshot without waiting for full page load.
+
+        Used when normal screenshot times out - captures whatever is visible
+        (like Cloudflare challenge pages) for blocked page detection.
+        """
+        width = random.randint(1280, 1440)
+        height = random.randint(800, 900)
+
+        context = await self.browser.new_context(
+            viewport={'width': width, 'height': height},
+            user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            locale='en-US',
+            timezone_id='America/New_York',
+            java_script_enabled=True,
+            bypass_csp=True,
+        )
+        page = await context.new_page()
+
+        stealth = Stealth(navigator_platform_override='MacIntel')
+        await stealth.apply_stealth_async(page)
+
+        try:
+            # Navigate with shorter timeout, don't wait for full load
+            await page.goto(url, wait_until="domcontentloaded", timeout=timeout)
+
+            # Brief wait to let challenge page render
+            await asyncio.sleep(3)
+
+            # Take screenshot of whatever is visible
+            screenshot_bytes = await page.screenshot(full_page=False, type='png')
+
+            return resize_image_for_claude(screenshot_bytes)
 
         finally:
             await page.close()

@@ -16,6 +16,7 @@ export function AuditCard({ audit }: AuditCardProps) {
     analyzing: 'bg-purple-100 text-purple-700',
     completed: 'bg-green-100 text-green-700',
     failed: 'bg-red-100 text-red-700',
+    blocked: 'bg-orange-100 text-orange-700',
   };
 
   const statusLabels: Record<string, string> = {
@@ -24,6 +25,7 @@ export function AuditCard({ audit }: AuditCardProps) {
     analyzing: 'Analyzing...',
     completed: 'Completed',
     failed: 'Failed',
+    blocked: 'Blocked',
   };
 
   return (
@@ -44,26 +46,46 @@ export function AuditCard({ audit }: AuditCardProps) {
               </div>
 
               <h3 className="font-medium text-gray-900 truncate mb-1">
-                {(() => {
-                  try {
-                    return new URL(audit.original_url || audit.audit_url).hostname;
-                  } catch {
-                    return audit.audit_url;
-                  }
-                })()}
+                {audit.audit_mode === 'image_upload' ? (
+                  <span className="flex items-center gap-1">
+                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    Image Upload Audit
+                  </span>
+                ) : (
+                  (() => {
+                    try {
+                      return new URL(audit.original_url || audit.audit_url || '').hostname;
+                    } catch {
+                      return audit.audit_url || 'Audit';
+                    }
+                  })()
+                )}
               </h3>
 
               <div className="text-sm text-gray-500 space-y-1">
-                {audit.original_url && (
+                {audit.audit_mode === 'image_upload' && audit.uploaded_images ? (
                   <p className="truncate">
-                    <span className="text-gray-400">Original:</span> {audit.original_url}
+                    <span className="text-gray-400">Images:</span>{' '}
+                    {audit.uploaded_images.map((img) => img.filename).join(', ')}
                   </p>
+                ) : (
+                  <>
+                    {audit.original_url && (
+                      <p className="truncate">
+                        <span className="text-gray-400">Original:</span> {audit.original_url}
+                      </p>
+                    )}
+                    {audit.audit_url && (
+                      <p className="truncate">
+                        <span className="text-gray-400">
+                          {audit.audit_type === 'standalone' ? 'URL:' : 'Localized:'}
+                        </span> {audit.audit_url}
+                      </p>
+                    )}
+                  </>
                 )}
-                <p className="truncate">
-                  <span className="text-gray-400">
-                    {audit.audit_type === 'standalone' ? 'URL:' : 'Localized:'}
-                  </span> {audit.audit_url}
-                </p>
               </div>
 
               {audit.audit_type === 'standalone' ? (
@@ -94,8 +116,16 @@ export function AuditCard({ audit }: AuditCardProps) {
 
             {audit.status === 'failed' && (
               <div className="ml-4 text-red-500">
-                <svg className="w-8 h-8\" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+            )}
+
+            {audit.status === 'blocked' && (
+              <div className="ml-4 text-orange-500">
+                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
               </div>
             )}

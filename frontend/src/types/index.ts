@@ -11,11 +11,25 @@ export interface Token {
   token_type: string;
 }
 
-export type AuditStatus = 'pending' | 'scraping' | 'analyzing' | 'completed' | 'failed';
+export type AuditStatus = 'pending' | 'scraping' | 'analyzing' | 'completed' | 'failed' | 'blocked';
 
-export type AuditType = 'comparison' | 'standalone';
+export type AuditType = 'comparison' | 'standalone' | 'proficiency';
 
-export type AuditMode = 'auto' | 'text' | 'screenshot' | 'combined';
+export type AuditMode = 'auto' | 'text' | 'screenshot' | 'combined' | 'image_upload';
+
+export type ImageLabel = 'original' | 'localized';
+
+export interface UploadedImageInfo {
+  label: ImageLabel;
+  filename: string;
+  data?: string;  // Base64-encoded image data
+}
+
+export interface UploadedImageFile {
+  file: File;
+  label: ImageLabel;
+  preview: string;  // Data URL for preview
+}
 
 export type AuditDimension =
   | 'CORRECTNESS'
@@ -25,7 +39,8 @@ export type AuditDimension =
   | 'CONSISTENCY'
   | 'COMPLETENESS'
   | 'UI_UX'
-  | 'SEO';
+  | 'SEO'
+  | 'LANGUAGE_PROFICIENCY';
 
 export interface AuditFinding {
   issue: string;
@@ -97,7 +112,7 @@ export interface Audit {
   id: number;
   audit_type: AuditType;
   original_url: string | null;  // null for standalone audits
-  audit_url: string;
+  audit_url: string | null;  // null for image_upload mode
   source_language: string | null;
   target_language: string | null;
   industry: string | null;
@@ -106,6 +121,7 @@ export interface Audit {
   glossary_id: number | null;
   status: AuditStatus;
   error_message: string | null;
+  blocked_reason: string | null;
   progress_message: string | null;
   progress_step: number | null;
   progress_total: number | null;
@@ -116,6 +132,7 @@ export interface Audit {
   content_pairs?: ContentPairs;
   original_screenshot: string | null;
   audit_screenshot: string | null;
+  uploaded_images?: UploadedImageInfo[] | null;  // For image_upload mode
   glossary?: AuditGlossary | null;
   // API usage and cost
   api_cost_usd: number | null;
@@ -127,7 +144,7 @@ export interface Audit {
 export interface AuditCreate {
   audit_type?: AuditType;
   original_url?: string;  // Required for comparison, optional for standalone
-  audit_url: string;
+  audit_url?: string;  // Optional for image_upload mode
   source_language?: string;  // Required for standalone
   target_language?: string;
   industry?: string;
@@ -196,6 +213,7 @@ export const DIMENSION_LABELS: Record<AuditDimension, string> = {
   COMPLETENESS: 'Completeness',
   UI_UX: 'UI/UX Localization',
   SEO: 'SEO',
+  LANGUAGE_PROFICIENCY: 'Language Proficiency',
 };
 
 export const DIMENSION_DESCRIPTIONS: Record<AuditDimension, string> = {
@@ -207,6 +225,7 @@ export const DIMENSION_DESCRIPTIONS: Record<AuditDimension, string> = {
   COMPLETENESS: 'Missing/untranslated content',
   UI_UX: 'Date, currency, measurement formats',
   SEO: 'Meta tags, keywords localization',
+  LANGUAGE_PROFICIENCY: 'Native vs translated text quality',
 };
 
 export const INDUSTRIES = [
@@ -225,6 +244,7 @@ export const AUDIT_MODES: { value: AuditMode; label: string; description: string
   { value: 'text', label: 'Text Only', description: 'Extracts and analyzes page text content' },
   { value: 'screenshot', label: 'Screenshot Only', description: 'Visual analysis using page screenshots' },
   { value: 'combined', label: 'Combined (Most Thorough)', description: 'Both text and screenshot analysis, merged results' },
+  { value: 'image_upload', label: 'Upload Images', description: 'Upload screenshot images instead of providing URLs' },
 ];
 
 export const AUDIT_TYPES: { value: AuditType; label: string; description: string }[] = [
@@ -301,3 +321,38 @@ export const APP_STORE_FEED_TYPES = [
   { value: 'paid', label: 'Top Paid' },
   { value: 'grossing', label: 'Top Grossing' },
 ];
+
+// Proficiency Test Types
+export interface ProficiencyFinding {
+  issue: string;
+  text?: string;
+  suggestion?: string;
+  severity: 'high' | 'medium' | 'low';
+}
+
+export interface ProficiencyGoodExample {
+  description: string;
+  text?: string;
+}
+
+export interface ProficiencyTestResult {
+  id: number;
+  status: AuditStatus;
+  url?: string | null;
+  score?: number | null;
+  verdict?: string | null;  // Native/Near-Native/Competent/Developing/Needs Improvement
+  findings?: ProficiencyFinding[] | null;
+  good_examples?: ProficiencyGoodExample[] | null;
+  recommendations?: string[] | null;
+  created_at: string;
+  completed_at?: string | null;
+  error_message?: string | null;
+}
+
+export const PROFICIENCY_VERDICTS: Record<string, { label: string; color: string }> = {
+  'Native/Expert': { label: 'Native/Expert', color: 'text-green-600' },
+  'Near-Native': { label: 'Near-Native', color: 'text-green-500' },
+  'Competent': { label: 'Competent', color: 'text-yellow-600' },
+  'Developing': { label: 'Developing', color: 'text-orange-500' },
+  'Needs Improvement': { label: 'Needs Improvement', color: 'text-red-500' },
+};

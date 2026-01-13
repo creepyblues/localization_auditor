@@ -3,12 +3,42 @@
 import { useState, useEffect } from 'react';
 import { Card, CardHeader, CardContent } from '@/components/ui/Card';
 import { ScoreRing } from '@/components/ui/ScoreRing';
+import { ImageZoomModal } from '@/components/ui/ImageZoomModal';
 import { ContentComparisonTable } from './ContentComparisonTable';
 import type { Audit, AuditResult, AuditDimension, AuditFinding, GoodExample, AuditGlossary } from '@/types';
 import { DIMENSION_LABELS, DIMENSION_DESCRIPTIONS } from '@/types';
 
 interface AuditResultsProps {
   audit: Audit;
+}
+
+// Clickable screenshot component
+interface ClickableScreenshotProps {
+  src: string;
+  alt: string;
+  className?: string;
+  onOpen: (src: string) => void;
+}
+
+function ClickableScreenshot({ src, alt, className = '', onOpen }: ClickableScreenshotProps) {
+  return (
+    <div className="relative group">
+      <img
+        src={src}
+        alt={alt}
+        className={`${className} cursor-pointer transition-opacity group-hover:opacity-90`}
+        onClick={() => onOpen(src)}
+      />
+      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+        <div className="bg-black/60 text-white px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+          </svg>
+          Click to zoom
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function GlossarySection({ glossary }: { glossary: AuditGlossary }) {
@@ -112,7 +142,7 @@ function GlossarySection({ glossary }: { glossary: AuditGlossary }) {
 
 interface IssueCardProps {
   finding: AuditFinding;
-  auditType: 'comparison' | 'standalone';
+  auditType: 'comparison' | 'standalone' | 'proficiency';
   contentPairs?: import('@/types').ContentPairs;
 }
 
@@ -387,9 +417,10 @@ interface DimensionCardProps {
   auditScreenshot?: string | null;
   auditType?: 'comparison' | 'standalone';
   contentPairs?: import('@/types').ContentPairs;
+  onOpenZoom?: (src: string) => void;
 }
 
-function DimensionCard({ result, originalScreenshot, auditScreenshot, auditType, contentPairs }: DimensionCardProps) {
+function DimensionCard({ result, originalScreenshot, auditScreenshot, auditType, contentPairs, onOpenZoom }: DimensionCardProps) {
   const [showScreenshot, setShowScreenshot] = useState(false);
   const hasScreenshots = originalScreenshot || auditScreenshot;
 
@@ -488,10 +519,11 @@ function DimensionCard({ result, originalScreenshot, auditScreenshot, auditType,
                   // Standalone: show only audit screenshot
                   auditScreenshot && (
                     <div className="border rounded-lg overflow-hidden bg-gray-100">
-                      <img
+                      <ClickableScreenshot
                         src={`data:image/png;base64,${auditScreenshot}`}
                         alt="Page screenshot"
                         className="w-full h-auto max-h-64 object-contain"
+                        onOpen={onOpenZoom || (() => {})}
                       />
                     </div>
                   )
@@ -502,10 +534,11 @@ function DimensionCard({ result, originalScreenshot, auditScreenshot, auditType,
                       <div>
                         <p className="text-xs text-gray-500 mb-1">Original</p>
                         <div className="border rounded-lg overflow-hidden bg-gray-100">
-                          <img
+                          <ClickableScreenshot
                             src={`data:image/png;base64,${originalScreenshot}`}
                             alt="Original page"
                             className="w-full h-auto max-h-48 object-contain"
+                            onOpen={onOpenZoom || (() => {})}
                           />
                         </div>
                       </div>
@@ -514,10 +547,11 @@ function DimensionCard({ result, originalScreenshot, auditScreenshot, auditType,
                       <div>
                         <p className="text-xs text-gray-500 mb-1">Localized</p>
                         <div className="border rounded-lg overflow-hidden bg-gray-100">
-                          <img
+                          <ClickableScreenshot
                             src={`data:image/png;base64,${auditScreenshot}`}
                             alt="Localized page"
                             className="w-full h-auto max-h-48 object-contain"
+                            onOpen={onOpenZoom || (() => {})}
                           />
                         </div>
                       </div>
@@ -537,11 +571,12 @@ interface DimensionTabContentProps {
   result: AuditResult;
   originalScreenshot?: string | null;
   auditScreenshot?: string | null;
-  auditType: 'comparison' | 'standalone';
+  auditType: 'comparison' | 'standalone' | 'proficiency';
   contentPairs?: import('@/types').ContentPairs;
+  onOpenZoom?: (src: string) => void;
 }
 
-function DimensionTabContent({ result, originalScreenshot, auditScreenshot, auditType, contentPairs }: DimensionTabContentProps) {
+function DimensionTabContent({ result, originalScreenshot, auditScreenshot, auditType, contentPairs, onOpenZoom }: DimensionTabContentProps) {
   const [showScreenshot, setShowScreenshot] = useState(false);
   const hasScreenshots = originalScreenshot || auditScreenshot;
 
@@ -655,10 +690,11 @@ function DimensionTabContent({ result, originalScreenshot, auditScreenshot, audi
               {auditType === 'standalone' ? (
                 auditScreenshot && (
                   <div className="border rounded-lg overflow-hidden bg-gray-100">
-                    <img
+                    <ClickableScreenshot
                       src={`data:image/png;base64,${auditScreenshot}`}
                       alt="Page screenshot"
                       className="w-full h-auto max-h-96 object-contain"
+                      onOpen={onOpenZoom || (() => {})}
                     />
                   </div>
                 )
@@ -668,10 +704,11 @@ function DimensionTabContent({ result, originalScreenshot, auditScreenshot, audi
                     <div>
                       <p className="text-xs text-gray-500 mb-1 font-medium">Original</p>
                       <div className="border rounded-lg overflow-hidden bg-gray-100">
-                        <img
+                        <ClickableScreenshot
                           src={`data:image/png;base64,${originalScreenshot}`}
                           alt="Original page"
                           className="w-full h-auto max-h-64 object-contain"
+                          onOpen={onOpenZoom || (() => {})}
                         />
                       </div>
                     </div>
@@ -680,10 +717,11 @@ function DimensionTabContent({ result, originalScreenshot, auditScreenshot, audi
                     <div>
                       <p className="text-xs text-gray-500 mb-1 font-medium">Localized</p>
                       <div className="border rounded-lg overflow-hidden bg-gray-100">
-                        <img
+                        <ClickableScreenshot
                           src={`data:image/png;base64,${auditScreenshot}`}
                           alt="Localized page"
                           className="w-full h-auto max-h-64 object-contain"
+                          onOpen={onOpenZoom || (() => {})}
                         />
                       </div>
                     </div>
@@ -700,6 +738,13 @@ function DimensionTabContent({ result, originalScreenshot, auditScreenshot, audi
 
 export function AuditResults({ audit }: AuditResultsProps) {
   const [activeTab, setActiveTab] = useState<string | null>(null);
+  const [zoomModalOpen, setZoomModalOpen] = useState(false);
+  const [zoomImageSrc, setZoomImageSrc] = useState('');
+
+  const handleOpenZoom = (src: string) => {
+    setZoomImageSrc(src);
+    setZoomModalOpen(true);
+  };
 
   // Sort results by score (lowest first to highlight issues)
   // For standalone audits, filter out CONSISTENCY dimension (not applicable)
@@ -732,7 +777,8 @@ export function AuditResults({ audit }: AuditResultsProps) {
   const hasRightColumnContent = audit.audit_type === 'standalone' ||
     audit.glossary ||
     audit.audit_screenshot ||
-    audit.original_screenshot;
+    audit.original_screenshot ||
+    (audit.audit_mode === 'image_upload' && audit.uploaded_images && audit.uploaded_images.length > 0);
 
   return (
     <div className="space-y-6">
@@ -844,10 +890,11 @@ export function AuditResults({ audit }: AuditResultsProps) {
                 </CardHeader>
                 <CardContent>
                   <div className="border rounded-lg overflow-hidden bg-gray-100">
-                    <img
+                    <ClickableScreenshot
                       src={`data:image/png;base64,${audit.audit_screenshot}`}
                       alt="Audited page screenshot"
                       className="w-full h-auto max-h-80 object-contain"
+                      onOpen={handleOpenZoom}
                     />
                   </div>
                 </CardContent>
@@ -866,10 +913,11 @@ export function AuditResults({ audit }: AuditResultsProps) {
                       <div>
                         <p className="text-xs text-gray-500 mb-1 font-medium">Original</p>
                         <div className="border rounded-lg overflow-hidden bg-gray-100">
-                          <img
+                          <ClickableScreenshot
                             src={`data:image/png;base64,${audit.original_screenshot}`}
                             alt="Original page"
                             className="w-full h-auto max-h-48 object-contain"
+                            onOpen={handleOpenZoom}
                           />
                         </div>
                       </div>
@@ -878,14 +926,66 @@ export function AuditResults({ audit }: AuditResultsProps) {
                       <div>
                         <p className="text-xs text-gray-500 mb-1 font-medium">Localized</p>
                         <div className="border rounded-lg overflow-hidden bg-gray-100">
-                          <img
+                          <ClickableScreenshot
                             src={`data:image/png;base64,${audit.audit_screenshot}`}
                             alt="Localized page"
                             className="w-full h-auto max-h-48 object-contain"
+                            onOpen={handleOpenZoom}
                           />
                         </div>
                       </div>
                     )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Uploaded Images - Image Upload mode */}
+            {audit.audit_mode === 'image_upload' && audit.uploaded_images && audit.uploaded_images.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <h3 className="font-semibold text-gray-900">Uploaded Images</h3>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {audit.uploaded_images
+                      .filter((img) => img.label === 'original')
+                      .map((img, idx) => (
+                        <div key={`original-${idx}`}>
+                          <p className="text-xs text-gray-500 mb-1 font-medium">
+                            Original {img.filename && <span className="text-gray-400">({img.filename})</span>}
+                          </p>
+                          {img.data && (
+                            <div className="border rounded-lg overflow-hidden bg-gray-100">
+                              <ClickableScreenshot
+                                src={`data:image/png;base64,${img.data}`}
+                                alt={`Original: ${img.filename}`}
+                                className="w-full h-auto max-h-64 object-contain"
+                                onOpen={handleOpenZoom}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    {audit.uploaded_images
+                      .filter((img) => img.label === 'localized')
+                      .map((img, idx) => (
+                        <div key={`localized-${idx}`}>
+                          <p className="text-xs text-gray-500 mb-1 font-medium">
+                            Localized {img.filename && <span className="text-gray-400">({img.filename})</span>}
+                          </p>
+                          {img.data && (
+                            <div className="border rounded-lg overflow-hidden bg-gray-100">
+                              <ClickableScreenshot
+                                src={`data:image/png;base64,${img.data}`}
+                                alt={`Localized: ${img.filename}`}
+                                className="w-full h-auto max-h-64 object-contain"
+                                onOpen={handleOpenZoom}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      ))}
                   </div>
                 </CardContent>
               </Card>
@@ -979,6 +1079,7 @@ export function AuditResults({ audit }: AuditResultsProps) {
                 auditScreenshot={audit.audit_screenshot}
                 auditType={audit.audit_type || 'comparison'}
                 contentPairs={audit.content_pairs}
+                onOpenZoom={handleOpenZoom}
               />
             )}
           </CardContent>
@@ -989,6 +1090,13 @@ export function AuditResults({ audit }: AuditResultsProps) {
       {audit.audit_type !== 'standalone' && audit.content_pairs && (
         <ContentComparisonTable contentPairs={audit.content_pairs} />
       )}
+
+      {/* Image Zoom Modal */}
+      <ImageZoomModal
+        imageSrc={zoomImageSrc}
+        isOpen={zoomModalOpen}
+        onClose={() => setZoomModalOpen(false)}
+      />
     </div>
   );
 }

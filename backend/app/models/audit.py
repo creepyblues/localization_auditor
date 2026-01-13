@@ -13,12 +13,14 @@ class AuditStatus(str, Enum):
     ANALYZING = "analyzing"
     COMPLETED = "completed"
     FAILED = "failed"
+    BLOCKED = "blocked"  # Page access blocked (CAPTCHA, Cloudflare, etc.)
 
 
 class AuditType(str, Enum):
-    """Type of audit - comparison or standalone."""
+    """Type of audit - comparison, standalone, or proficiency."""
     COMPARISON = "comparison"  # Compare original URL with localized URL
     STANDALONE = "standalone"  # Assess back-translation quality of single URL
+    PROFICIENCY = "proficiency"  # Language proficiency test only
 
 
 class AuditDimension(str, Enum):
@@ -41,9 +43,9 @@ class Audit(Base):
     # Audit type: comparison (requires original_url) or standalone (only audit_url)
     audit_type: Mapped[str] = mapped_column(String(20), default=AuditType.COMPARISON.value)
 
-    # URLs to audit
+    # URLs to audit (optional for image_upload mode)
     original_url: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)  # Required for comparison, None for standalone
-    audit_url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    audit_url: Mapped[Optional[str]] = mapped_column(String(2048), nullable=True)  # Optional for image_upload mode
 
     # Metadata
     source_language: Mapped[str] = mapped_column(String(10), nullable=True)  # e.g., "en"
@@ -62,6 +64,7 @@ class Audit(Base):
     # Status tracking
     status: Mapped[str] = mapped_column(String(50), default=AuditStatus.PENDING.value)
     error_message: Mapped[str] = mapped_column(Text, nullable=True)
+    blocked_reason: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)  # Why page was blocked
 
     # Progress tracking
     progress_message: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
@@ -81,6 +84,10 @@ class Audit(Base):
     # Screenshots (base64-encoded PNG images)
     original_screenshot: Mapped[str] = mapped_column(Text, nullable=True)
     audit_screenshot: Mapped[str] = mapped_column(Text, nullable=True)
+
+    # Uploaded images for image_upload mode
+    # JSON array of {label: "original"|"localized", data: base64, filename: str}
+    uploaded_images: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 
     # API usage and cost tracking
     api_cost_usd: Mapped[Optional[float]] = mapped_column(Float, nullable=True)

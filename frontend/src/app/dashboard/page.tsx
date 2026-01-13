@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
 import { AuditCard } from '@/components/audit/AuditCard';
 import { CreateAuditForm } from '@/components/audit/CreateAuditForm';
+import { LocalTestForm } from '@/components/audit/LocalTestForm';
 import type { Audit } from '@/types';
 
 function DashboardContent() {
@@ -31,6 +32,7 @@ function DashboardContent() {
   } : undefined;
 
   const [showCreateForm, setShowCreateForm] = useState(isRerun);
+  const [showLocalTest, setShowLocalTest] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -89,6 +91,9 @@ function DashboardContent() {
               <Link href="/app-store">
                 <Button variant="ghost">App Store Scanner</Button>
               </Link>
+              <Link href="/research">
+                <Button variant="ghost">Research</Button>
+              </Link>
               <Link href="/glossaries">
                 <Button variant="ghost">Glossaries</Button>
               </Link>
@@ -102,7 +107,25 @@ function DashboardContent() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {showCreateForm ? (
+        {showLocalTest ? (
+          <div className="max-w-2xl mx-auto">
+            <div className="mb-4">
+              <Button
+                variant="ghost"
+                onClick={() => setShowLocalTest(false)}
+              >
+                &larr; Back to Dashboard
+              </Button>
+            </div>
+            <LocalTestForm
+              onComplete={() => {
+                setShowLocalTest(false);
+                loadAudits();
+              }}
+              onCancel={() => setShowLocalTest(false)}
+            />
+          </div>
+        ) : showCreateForm ? (
           <div className="max-w-2xl mx-auto">
             <div className="mb-4">
               <Button
@@ -127,9 +150,14 @@ function DashboardContent() {
                 <h2 className="text-2xl font-bold text-gray-900">Dashboard</h2>
                 <p className="text-gray-500">Manage your localization audits</p>
               </div>
-              <Button onClick={() => setShowCreateForm(true)}>
-                + New Audit
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={() => setShowLocalTest(true)}>
+                  Language Proficiency Test
+                </Button>
+                <Button onClick={() => setShowCreateForm(true)}>
+                  + New Audit
+                </Button>
+              </div>
             </div>
 
             {loading ? (

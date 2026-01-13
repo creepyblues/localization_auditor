@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
+import { ImageZoomModal } from '@/components/ui/ImageZoomModal';
 import { AuditResults } from '@/components/audit/AuditResults';
 import type { Audit } from '@/types';
 
@@ -17,6 +18,8 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
   const [audit, setAudit] = useState<Audit | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [zoomModalOpen, setZoomModalOpen] = useState(false);
+  const [zoomImageSrc, setZoomImageSrc] = useState('');
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -115,7 +118,7 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
                       rerun: 'true',
                       audit_type: audit.audit_type || 'comparison',
                       ...(audit.original_url && { original_url: audit.original_url }),
-                      audit_url: audit.audit_url,
+                      ...(audit.audit_url && { audit_url: audit.audit_url }),
                       ...(audit.source_language && { source_language: audit.source_language }),
                       ...(audit.industry && { industry: audit.industry }),
                       ...(audit.glossary_id && { glossary_id: audit.glossary_id.toString() }),
@@ -231,7 +234,8 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
                   <div className="flex items-center gap-2 mb-2">
                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
                       audit.status === 'completed' ? 'bg-green-100' :
-                      audit.status === 'failed' ? 'bg-red-100' : 'bg-yellow-100'
+                      audit.status === 'failed' ? 'bg-red-100' :
+                      audit.status === 'blocked' ? 'bg-orange-100' : 'bg-yellow-100'
                     }`}>
                       {audit.status === 'completed' ? (
                         <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -240,6 +244,10 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
                       ) : audit.status === 'failed' ? (
                         <svg className="w-4 h-4 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      ) : audit.status === 'blocked' ? (
+                        <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                         </svg>
                       ) : (
                         <svg className="w-4 h-4 text-yellow-600 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -251,51 +259,85 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
                   <p className="text-xs text-gray-500 uppercase tracking-wide">Status</p>
                   <p className={`text-sm font-semibold mt-1 capitalize ${
                     audit.status === 'completed' ? 'text-green-700' :
-                    audit.status === 'failed' ? 'text-red-700' : 'text-yellow-700'
+                    audit.status === 'failed' ? 'text-red-700' :
+                    audit.status === 'blocked' ? 'text-orange-700' : 'text-yellow-700'
                   }`}>
                     {audit.status}
                   </p>
                 </div>
               </div>
 
-              {/* URL Card - Full Width */}
+              {/* URL or Images Card - Full Width */}
               <div className="mt-4 bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center">
-                    <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                    </svg>
+                    {audit.audit_mode === 'image_upload' ? (
+                      <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                      </svg>
+                    )}
                   </div>
-                  <p className="text-xs text-gray-500 uppercase tracking-wide">URL</p>
+                  <p className="text-xs text-gray-500 uppercase tracking-wide">
+                    {audit.audit_mode === 'image_upload' ? 'Uploaded Images' : 'URL'}
+                  </p>
                 </div>
-                <div className={`grid ${audit.original_url ? 'md:grid-cols-2' : ''} gap-4`}>
-                  {audit.original_url && (
-                    <div>
-                      <p className="text-xs text-gray-500 mb-1">Original</p>
-                      <a
-                        href={audit.original_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm text-blue-600 hover:underline truncate block"
+
+                {audit.audit_mode === 'image_upload' && audit.uploaded_images ? (
+                  <div className="flex flex-wrap gap-2">
+                    {audit.uploaded_images.map((img, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2 border border-gray-200"
                       >
-                        {audit.original_url}
-                      </a>
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-xs text-gray-500 mb-1">
-                      {audit.audit_type === 'standalone' ? 'Audited' : 'Localized'}
-                    </p>
-                    <a
-                      href={audit.audit_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-blue-600 hover:underline truncate block"
-                    >
-                      {audit.audit_url}
-                    </a>
+                        <span
+                          className={`text-xs font-medium px-2 py-0.5 rounded ${
+                            img.label === 'original'
+                              ? 'bg-blue-100 text-blue-700'
+                              : 'bg-green-100 text-green-700'
+                          }`}
+                        >
+                          {img.label}
+                        </span>
+                        <span className="text-sm text-gray-700">{img.filename}</span>
+                      </div>
+                    ))}
                   </div>
-                </div>
+                ) : (
+                  <div className={`grid ${audit.original_url ? 'md:grid-cols-2' : ''} gap-4`}>
+                    {audit.original_url && (
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">Original</p>
+                        <a
+                          href={audit.original_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-blue-600 hover:underline truncate block"
+                        >
+                          {audit.original_url}
+                        </a>
+                      </div>
+                    )}
+                    {audit.audit_url && (
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">
+                          {audit.audit_type === 'standalone' ? 'Audited' : 'Localized'}
+                        </p>
+                        <a
+                          href={audit.audit_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-blue-600 hover:underline truncate block"
+                        >
+                          {audit.audit_url}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -414,7 +456,7 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
               <Card>
                 <CardContent className="py-12 text-center">
                   <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <svg className="w-8 h-8 text-red-600\" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg className="w-8 h-8 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </div>
@@ -424,10 +466,122 @@ export default function AuditDetailPage({ params }: { params: Promise<{ id: stri
               </Card>
             )}
 
+            {audit.status === 'blocked' && (
+              <Card>
+                <CardContent className="py-8">
+                  <div className="max-w-2xl mx-auto">
+                    {/* Header */}
+                    <div className="flex items-center justify-center gap-3 mb-6">
+                      <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
+                        <svg className="w-6 h-6 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-medium text-gray-900">Page Access Blocked</h3>
+                        <p className="text-sm text-gray-500">The website appears to be showing a security challenge</p>
+                      </div>
+                    </div>
+
+                    {/* Reason */}
+                    {audit.blocked_reason && (
+                      <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 mb-6">
+                        <p className="text-sm font-medium text-orange-800 mb-1">Detection Result:</p>
+                        <p className="text-sm text-orange-700">{audit.blocked_reason}</p>
+                      </div>
+                    )}
+
+                    {/* Screenshot preview */}
+                    {audit.audit_screenshot && (
+                      <div className="mb-6">
+                        <p className="text-sm font-medium text-gray-700 mb-2">Captured Screenshot:</p>
+                        <div
+                          className="border border-gray-200 rounded-lg overflow-hidden cursor-pointer relative group"
+                          onClick={() => {
+                            setZoomImageSrc(`data:image/png;base64,${audit.audit_screenshot}`);
+                            setZoomModalOpen(true);
+                          }}
+                        >
+                          <img
+                            src={`data:image/png;base64,${audit.audit_screenshot}`}
+                            alt="Blocked page screenshot"
+                            className="w-full max-h-64 object-contain bg-gray-50 transition-opacity group-hover:opacity-90"
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                            <div className="bg-black/60 text-white px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-2">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                              </svg>
+                              Click to zoom
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Action Buttons */}
+                    <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                      <Button
+                        onClick={async () => {
+                          try {
+                            await api.retryBlockedAudit(audit.id);
+                            loadAudit();
+                          } catch (err) {
+                            setError(err instanceof Error ? err.message : 'Failed to retry audit');
+                          }
+                        }}
+                        className="flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        Retry Audit
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={async () => {
+                          if (!confirm('This will analyze the blocked page screenshot. The results may not be meaningful. Continue?')) return;
+                          try {
+                            await api.proceedBlockedAudit(audit.id);
+                            loadAudit();
+                          } catch (err) {
+                            setError(err instanceof Error ? err.message : 'Failed to proceed with audit');
+                          }
+                        }}
+                        className="flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                        </svg>
+                        Proceed Anyway
+                      </Button>
+                      <Button
+                        variant="danger"
+                        onClick={handleDelete}
+                      >
+                        Cancel Audit
+                      </Button>
+                    </div>
+
+                    <p className="text-xs text-gray-500 text-center mt-4">
+                      &quot;Retry&quot; will attempt to access the page again. &quot;Proceed Anyway&quot; will analyze the blocked page screenshot.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {audit.status === 'completed' && <AuditResults audit={audit} />}
           </>
         ) : null}
       </main>
+
+      {/* Image Zoom Modal */}
+      <ImageZoomModal
+        imageSrc={zoomImageSrc}
+        isOpen={zoomModalOpen}
+        onClose={() => setZoomModalOpen(false)}
+      />
     </div>
   );
 }

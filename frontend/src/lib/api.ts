@@ -3,6 +3,8 @@ import type {
   Token,
   Audit,
   AuditCreate,
+  AuditType,
+  ImageLabel,
   Glossary,
   GlossaryCreate,
   GlossaryTerm,
@@ -11,6 +13,7 @@ import type {
   AppStoreCategories,
   AppStoreScanResult,
   AppStoreApp,
+  ProficiencyTestResult,
 } from '@/types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
@@ -99,6 +102,51 @@ class ApiClient {
     });
   }
 
+  async createAuditWithImages(
+    images: { file: File; label: ImageLabel }[],
+    data: {
+      audit_type?: AuditType;
+      source_language: string;
+      target_language?: string;
+      industry?: string;
+      glossary_id?: number;
+    }
+  ): Promise<Audit> {
+    const token = this.getToken();
+    const formData = new FormData();
+
+    // Add images
+    images.forEach((img) => {
+      formData.append('images', img.file);
+    });
+
+    // Add labels as JSON array
+    formData.append('image_labels', JSON.stringify(images.map(img => img.label)));
+
+    // Add other form fields
+    formData.append('audit_type', data.audit_type || 'comparison');
+    formData.append('source_language', data.source_language);
+    if (data.target_language) formData.append('target_language', data.target_language);
+    if (data.industry) formData.append('industry', data.industry);
+    if (data.glossary_id) formData.append('glossary_id', data.glossary_id.toString());
+
+    const response = await fetch(`${API_BASE}/audits/upload`, {
+      method: 'POST',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        // Note: Do NOT set Content-Type header for FormData - browser sets it with boundary
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
+      throw new Error(error.detail || `HTTP ${response.status}`);
+    }
+
+    return response.json();
+  }
+
   async listAudits(skip = 0, limit = 20): Promise<{ audits: Audit[]; total: number }> {
     return this.request<{ audits: Audit[]; total: number }>(
       `/audits?skip=${skip}&limit=${limit}`
@@ -111,6 +159,47 @@ class ApiClient {
 
   async deleteAudit(id: number): Promise<void> {
     return this.request<void>(`/audits/${id}`, { method: 'DELETE' });
+  }
+
+  async retryBlockedAudit(id: number): Promise<Audit> {
+    return this.request<Audit>(`/audits/${id}/retry`, { method: 'POST' });
+  }
+
+  async proceedBlockedAudit(id: number): Promise<Audit> {
+    return this.request<Audit>(`/audits/${id}/proceed`, { method: 'POST' });
+  }
+
+  // Proficiency Test
+  async runProficiencyTest(data: {
+    url?: string;
+    image?: File;
+    target_language: string;
+  }): Promise<ProficiencyTestResult> {
+    const token = this.getToken();
+    const formData = new FormData();
+
+    if (data.url) {
+      formData.append('url', data.url);
+    }
+    if (data.image) {
+      formData.append('image', data.image);
+    }
+    formData.append('target_language', data.target_language);
+
+    const response = await fetch(`${API_BASE}/audits/proficiency-test`, {
+      method: 'POST',
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
+      throw new Error(error.detail || `HTTP ${response.status}`);
+    }
+
+    return response.json();
   }
 
   // Glossaries
