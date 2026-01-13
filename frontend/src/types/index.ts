@@ -280,6 +280,9 @@ export interface AppStoreApp {
   average_user_rating: number;
   user_rating_count: number;
   track_url: string;
+  screenshots_ko: string[];
+  description_ko: string;
+  ko_store_available: boolean;
   error?: string;
 }
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { api } from '@/lib/api';
@@ -41,6 +41,10 @@ export default function AppStorePage() {
   const [scanHistory, setScanHistory] = useState<ScanHistoryItem[]>([]);
   const [showAllHistory, setShowAllHistory] = useState(false);
 
+  // Expandable rows state for Korean metadata
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [allExpanded, setAllExpanded] = useState(false);
+
   // Load history from localStorage on mount
   useEffect(() => {
     const saved = localStorage.getItem('appStoreScanHistory');
@@ -55,6 +59,25 @@ export default function AppStorePage() {
         ? prev.filter(l => l !== lang)
         : [...prev, lang]
     );
+  };
+
+  const toggleRow = (appId: string) => {
+    setExpandedRows(prev => {
+      const next = new Set(prev);
+      if (next.has(appId)) next.delete(appId);
+      else next.add(appId);
+      return next;
+    });
+  };
+
+  const toggleAllRows = (apps: typeof scanResult extends null ? never : NonNullable<typeof scanResult>['apps']) => {
+    if (allExpanded) {
+      setExpandedRows(new Set());
+    } else {
+      const koApps = apps.filter(app => app.screenshots_ko?.length > 0);
+      setExpandedRows(new Set(koApps.map(app => app.app_id)));
+    }
+    setAllExpanded(!allExpanded);
   };
 
   useEffect(() => {
@@ -382,11 +405,21 @@ export default function AppStorePage() {
               return (
                 <Card>
                   <CardContent className="py-6">
-                    <h3 className="text-lg font-semibold mb-4">
-                      {selectedLanguages.length > 0
-                        ? `${filteredApps.length} of ${scanResult.total_apps_scanned} Apps`
-                        : `Top ${scanResult.total_apps_scanned} Apps`}
-                    </h3>
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-lg font-semibold">
+                        {selectedLanguages.length > 0
+                          ? `${filteredApps.length} of ${scanResult.total_apps_scanned} Apps`
+                          : `Top ${scanResult.total_apps_scanned} Apps`}
+                      </h3>
+                      {filteredApps.some(app => app.screenshots_ko?.length > 0) && (
+                        <button
+                          onClick={() => toggleAllRows(filteredApps)}
+                          className="text-sm text-blue-600 hover:text-blue-800"
+                        >
+                          {allExpanded ? 'Collapse All KO' : 'Expand All KO'}
+                        </button>
+                      )}
+                    </div>
                     <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-50">
@@ -413,7 +446,8 @@ export default function AppStorePage() {
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
                           {filteredApps.map((app, idx) => (
-                        <tr key={app.app_id} className="hover:bg-gray-50">
+                          <React.Fragment key={app.app_id}>
+                        <tr className="hover:bg-gray-50">
                           <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                             {idx + 1}
                           </td>
@@ -436,9 +470,16 @@ export default function AppStorePage() {
                                 {app.language_count}
                               </span>
                               {app.languages.includes('KO') && (
-                                <span className="px-1.5 py-0.5 text-xs font-medium bg-green-100 text-green-800 rounded">
-                                  KR
-                                </span>
+                                <button
+                                  onClick={() => toggleRow(app.app_id)}
+                                  className={`px-1.5 py-0.5 text-xs font-medium rounded transition-colors ${
+                                    expandedRows.has(app.app_id)
+                                      ? 'bg-green-600 text-white'
+                                      : 'bg-green-100 text-green-800 hover:bg-green-200'
+                                  }`}
+                                >
+                                  KR {expandedRows.has(app.app_id) ? '▼' : '▶'}
+                                </button>
                               )}
                               {app.languages.includes('JA') && (
                                 <span className="px-1.5 py-0.5 text-xs font-medium bg-red-100 text-red-800 rounded">
@@ -465,6 +506,37 @@ export default function AppStorePage() {
                             {app.user_rating_count?.toLocaleString() || 'N/A'}
                           </td>
                         </tr>
+                        {expandedRows.has(app.app_id) && (
+                          <tr key={`${app.app_id}-expanded`}>
+                            <td colSpan={6} className="px-4 py-4 bg-green-50 border-b">
+                              {app.screenshots_ko?.length > 0 ? (
+                                <>
+                                  <div className="flex gap-3 mb-3 overflow-x-auto">
+                                    {app.screenshots_ko.map((url, i) => (
+                                      <img
+                                        key={i}
+                                        src={url}
+                                        alt={`Screenshot ${i + 1}`}
+                                        className="h-48 rounded shadow flex-shrink-0"
+                                      />
+                                    ))}
+                                  </div>
+                                  {app.description_ko && (
+                                    <p className="text-sm text-gray-700 whitespace-pre-line">
+                                      {app.description_ko}
+                                    </p>
+                                  )}
+                                </>
+                              ) : (
+                                <p className="text-sm text-gray-500 italic">
+                                  Korean App Store listing not available for this app.
+                                  The app supports Korean language but doesn&apos;t have localized marketing materials.
+                                </p>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                          </React.Fragment>
                           ))}
                         </tbody>
                       </table>

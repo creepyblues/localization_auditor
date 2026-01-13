@@ -143,7 +143,61 @@ class AppStoreScanner:
             "current_version_release_date": app_data.get("currentVersionReleaseDate", ""),
             "average_user_rating": app_data.get("averageUserRating", 0),
             "user_rating_count": app_data.get("userRatingCount", 0),
+            "track_url": app_data.get("trackViewUrl", ""),
         }
+
+    async def get_korean_metadata(self, app_id: str) -> Dict:
+        """
+        Fetch Korean localized screenshots and description for an app
+
+        Args:
+            app_id: iTunes app ID
+
+        Returns:
+            Dictionary with Korean screenshots and description preview
+        """
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.get(
+                    self.lookup_url,
+                    params={"id": app_id, "country": "kr", "lang": "ko"}
+                )
+                response.raise_for_status()
+                data = response.json()
+
+            results = data.get("results", [])
+            if not results:
+                logger.warning(f"App {app_id} not found in Korean App Store")
+                return {
+                    "screenshots_ko": [],
+                    "description_ko": "",
+                    "ko_store_available": False
+                }
+
+            app_data = results[0]
+            screenshots = app_data.get("screenshotUrls", [])
+
+            # Log if no screenshots found
+            if not screenshots:
+                logger.warning(f"App {app_id} has no screenshotUrls in Korean store response")
+
+            description = app_data.get("description", "")
+            # Get first 5 lines
+            lines = description.split('\n')[:5]
+            description_preview = '\n'.join(lines)
+
+            return {
+                "screenshots_ko": screenshots[:3],
+                "description_ko": description_preview,
+                "ko_store_available": True
+            }
+        except Exception as e:
+            logger.error(f"Error fetching Korean metadata for app {app_id}: {str(e)}")
+            return {
+                "screenshots_ko": [],
+                "description_ko": "",
+                "ko_store_available": False
+            }
 
     async def scan_category(
         self,
@@ -174,6 +228,17 @@ class AppStoreScanner:
             try:
                 logger.info(f"Fetching languages for app {i}/{len(top_apps)}: {app['name']}")
                 app_details = await self.get_app_languages(app["id"])
+
+                # Fetch Korean metadata if app supports Korean
+                if "KO" in app_details.get("languages", []):
+                    logger.info(f"Fetching Korean metadata for: {app['name']}")
+                    ko_metadata = await self.get_korean_metadata(app["id"])
+                    app_details.update(ko_metadata)
+                else:
+                    app_details["screenshots_ko"] = []
+                    app_details["description_ko"] = ""
+                    app_details["ko_store_available"] = False
+
                 apps_with_languages.append(app_details)
             except Exception as e:
                 logger.error(f"Error fetching languages for app {app['id']}: {str(e)}")
@@ -182,6 +247,9 @@ class AppStoreScanner:
                     "app_name": app["name"],
                     "artist": app["artist"],
                     "languages": [],
+                    "screenshots_ko": [],
+                    "description_ko": "",
+                    "ko_store_available": False,
                     "error": str(e)
                 })
 
