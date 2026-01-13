@@ -161,9 +161,14 @@ export default function GlossariesPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-bold text-gray-900">Localization Auditor</h1>
-            <Link href="/dashboard">
-              <Button variant="ghost">Back to Dashboard</Button>
-            </Link>
+            <div className="flex items-center gap-4">
+              <Link href="/dashboard">
+                <Button variant="ghost">Dashboard</Button>
+              </Link>
+              <Link href="/app-store">
+                <Button variant="ghost">App Store Scanner</Button>
+              </Link>
+            </div>
           </div>
         </div>
       </header>

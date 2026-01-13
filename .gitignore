@@ -10,3 +10,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Test results
+test_results.json
