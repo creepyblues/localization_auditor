@@ -279,6 +279,7 @@ export interface AppStoreApp {
   current_version_release_date: string;
   average_user_rating: number;
   user_rating_count: number;
+  track_url: string;
   error?: string;
 }
 
