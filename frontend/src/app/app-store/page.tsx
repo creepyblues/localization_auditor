@@ -186,7 +186,7 @@ export default function AppStorePage() {
                 )}
               </Button>
               {scanResult && (
-                <Button variant="outline" onClick={exportToJSON}>
+                <Button variant="secondary" onClick={exportToJSON}>
                   Export to JSON
                 </Button>
               )}
