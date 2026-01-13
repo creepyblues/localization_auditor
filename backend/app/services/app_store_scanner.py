@@ -6,6 +6,7 @@ Uses Apple's iTunes RSS feeds and Lookup API.
 """
 
 import httpx
+import re
 from typing import Dict, List, Optional
 import logging
 
@@ -144,7 +145,59 @@ class AppStoreScanner:
             "average_user_rating": app_data.get("averageUserRating", 0),
             "user_rating_count": app_data.get("userRatingCount", 0),
             "track_url": app_data.get("trackViewUrl", ""),
+            "seller_url": app_data.get("sellerUrl", ""),
+            "seller_name": app_data.get("sellerName", ""),
+            "artist_view_url": app_data.get("artistViewUrl", ""),
         }
+
+    async def scrape_korean_screenshots(self, app_id: str) -> List[str]:
+        """
+        Scrape Korean App Store page for screenshots when API returns none.
+        Fallback for apps where iTunes Lookup API doesn't return screenshot data.
+
+        Args:
+            app_id: iTunes app ID
+
+        Returns:
+            List of screenshot URLs (iPhone only, limited to first 3)
+        """
+        url = f"https://apps.apple.com/kr/app/id{app_id}?l=ko"
+        try:
+            async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+                response = await client.get(url)
+                response.raise_for_status()
+                html = response.text
+
+            # Find all mzstatic screenshot URLs
+            # Pattern matches iPhone screenshots (contain dimensions like 6.9 or _KO_ in path)
+            pattern = r'https://is\d+-ssl\.mzstatic\.com/image/thumb/[^"\'>\s]+\.(?:jpg|png)'
+            all_urls = re.findall(pattern, html)
+
+            # Filter for iPhone screenshots (typically contain specific patterns)
+            # and deduplicate while preserving order
+            seen = set()
+            iphone_screenshots = []
+            for url in all_urls:
+                # Skip if already seen
+                if url in seen:
+                    continue
+                seen.add(url)
+                # Look for iPhone screenshot patterns (6.9 inch display or _KO_ localized)
+                if '6.9' in url or '_KO_' in url or 'PurpleSource' in url:
+                    # Exclude Watch screenshots (contain Apple_Watch or Series)
+                    if 'Watch' not in url and 'Series' not in url:
+                        iphone_screenshots.append(url)
+
+            if iphone_screenshots:
+                logger.info(f"Scraped {len(iphone_screenshots)} screenshots for app {app_id}")
+                return iphone_screenshots[:3]
+            else:
+                logger.warning(f"No iPhone screenshots found via scraping for app {app_id}")
+                return []
+
+        except Exception as e:
+            logger.error(f"Error scraping screenshots for app {app_id}: {str(e)}")
+            return []
 
     async def get_korean_metadata(self, app_id: str) -> Dict:
         """
@@ -177,9 +230,10 @@ class AppStoreScanner:
             app_data = results[0]
             screenshots = app_data.get("screenshotUrls", [])
 
-            # Log if no screenshots found
+            # Fallback to web scraping if API returns no screenshots
             if not screenshots:
-                logger.warning(f"App {app_id} has no screenshotUrls in Korean store response")
+                logger.info(f"App {app_id} has no screenshotUrls in API, trying web scrape fallback")
+                screenshots = await self.scrape_korean_screenshots(app_id)
 
             description = app_data.get("description", "")
             # Get first 5 lines
@@ -250,6 +304,9 @@ class AppStoreScanner:
                     "screenshots_ko": [],
                     "description_ko": "",
                     "ko_store_available": False,
+                    "seller_url": "",
+                    "seller_name": "",
+                    "artist_view_url": "",
                     "error": str(e)
                 })
 
