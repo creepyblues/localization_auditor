@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import get_settings
-from app.api.routes import auth, audits, glossaries
+from app.api.routes import auth, audits, glossaries, app_store
 
 settings = get_settings()
 
@@ -28,6 +28,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api")
 app.include_router(audits.router, prefix="/api")
 app.include_router(glossaries.router, prefix="/api")
+app.include_router(app_store.router, prefix="/api")
 
 
 @app.get("/")
